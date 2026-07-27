@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Datos de sesión del agente
+memoria.json
+historial.json
+agente.log
+
+# Basura de pruebas
+free API endpoint Nvidia.py
+test.txt
+test2.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
