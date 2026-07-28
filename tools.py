@@ -186,6 +186,173 @@ def listar_recuerdos() -> str:
     return "\n".join(f"  {k}: {v}" for k, v in memoria.items())
 
 
+def fecha_hora(zona: str = "Europe/Madrid") -> str:
+    from datetime import datetime
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(zona)
+    except (ImportError, KeyError):
+        try:
+            import pytz
+            tz = pytz.timezone(zona)
+        except ImportError:
+            return f"ERROR: zona '{zona}' no disponible (sin zoneinfo ni pytz)"
+    ahora = datetime.now(tz)
+    return (
+        f"Fecha: {ahora.strftime('%A, %d de %B de %Y')}\n"
+        f"Hora: {ahora.strftime('%H:%M:%S')}\n"
+        f"Zona: {zona}\n"
+        f"ISO:  {ahora.isoformat()}"
+    )
+
+
+def tree(ruta: str = ".", max_nivel: int = 7) -> str:
+    from pathlib import Path
+
+    raiz = Path(ruta)
+    if not raiz.is_dir():
+        return f"ERROR: '{ruta}' no es un directorio"
+    if max_nivel < 1:
+        return f"ERROR: max_nivel debe ser >= 1"
+
+    rama = "+-- "
+    final = "\\-- "
+    tubo = "|   "
+    espacio = "    "
+
+    lineas = [f"{raiz.resolve()}/"]
+
+    def _recorrer(directorio: Path, nivel: int, prefijo: str):
+        if nivel > max_nivel:
+            lineas.append(f"{prefijo}{final}...")
+            return
+
+        entradas = sorted(
+            directorio.iterdir(),
+            key=lambda p: (not p.is_dir(), p.name.lower()),
+        )
+
+        for i, entrada in enumerate(entradas):
+            es_ultimo = i == len(entradas) - 1
+            conector = final if es_ultimo else rama
+
+            if entrada.is_dir():
+                lineas.append(f"{prefijo}{conector}{entrada.name}/")
+                nuevo = espacio if es_ultimo else tubo
+                _recorrer(entrada, nivel + 1, prefijo + nuevo)
+            else:
+                lineas.append(f"{prefijo}{conector}{entrada.name}")
+
+    _recorrer(raiz, 0, "")
+    return "\n".join(lineas)
+
+
+def descargar_url(url: str, timeout: int = 15) -> str:
+    import requests
+
+    if not url.startswith(("http://", "https://")):
+        return f"ERROR: URL debe empezar con http:// o https://"
+
+    try:
+        respuesta = requests.get(url, timeout=timeout, headers={
+            "User-Agent": "Agente3573b4n/1.0"
+        })
+    except requests.exceptions.Timeout:
+        return f"ERROR: la URL no respondio en {timeout}s"
+    except requests.exceptions.ConnectionError:
+        return f"ERROR: no se pudo conectar a '{url}'"
+    except requests.exceptions.RequestException as e:
+        return f"ERROR al descargar: {e}"
+
+    if respuesta.status_code != 200:
+        return f"ERROR: HTTP {respuesta.status_code} ({respuesta.reason})"
+
+    # Tamaño máximo: 100KB para no reventar el contexto del modelo
+    limite = 100_000
+    texto = respuesta.text[:limite]
+    if len(respuesta.text) > limite:
+        texto += f"\n[... truncado, {len(respuesta.text) - limite} bytes mas]"
+
+    return texto
+
+
+def notas(accion: str = "listar", texto: str = "", indice: int = None) -> str:
+    import json
+    from pathlib import Path
+
+    ruta = Path(__file__).parent / "notas.json"
+    if not ruta.exists():
+        ruta.write_text("[]", encoding="utf-8")
+    datos = json.loads(ruta.read_text(encoding="utf-8"))
+
+    if accion == "listar":
+        if not datos:
+            return "(no hay notas guardadas)"
+        return "\n".join(f"{i+1}. {n}" for i, n in enumerate(datos))
+
+    if accion == "agregar":
+        if not texto.strip():
+            return "ERROR: texto vacio, no se puede agregar"
+        datos.append(texto.strip())
+        ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
+        return f"OK: nota {len(datos)} agregada"
+
+    if accion == "borrar":
+        if not datos:
+            return "ERROR: no hay notas para borrar"
+        if indice is None:
+            return "ERROR: falta indice para borrar"
+        if indice < 1 or indice > len(datos):
+            return f"ERROR: indice {indice} fuera de rango (1-{len(datos)})"
+        borrada = datos.pop(indice - 1)
+        ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
+        return f"OK: nota {indice} borrada ('{borrada}')"
+
+    return f"ERROR: accion desconocida '{accion}'. Usa: listar, agregar, borrar"
+
+
+def clima(ciudad: str) -> str:
+    import requests
+
+    api_key = os.environ.get("OPENWEATHER_API_KEY")
+    if not api_key:
+        return (
+            "ERROR: falta la variable OPENWEATHER_API_KEY.\n"
+            "  Consigue una clave gratis en https://openweathermap.org/api\n"
+            "  Luego: $env:OPENWEATHER_API_KEY = 'tu-clave'"
+        )
+
+    try:
+        respuesta = requests.get(
+            "https://api.openweathermap.org/data/2.5/weather",
+            params={"q": ciudad, "appid": api_key, "units": "metric", "lang": "es"},
+            timeout=10,
+        )
+    except requests.exceptions.RequestException as e:
+        return f"ERROR al consultar el clima: {e}"
+
+    if respuesta.status_code == 404:
+        return f"ERROR: ciudad '{ciudad}' no encontrada"
+    if respuesta.status_code == 401:
+        return "ERROR: API key invalida. Revisa tu OPENWEATHER_API_KEY"
+    if respuesta.status_code != 200:
+        return f"ERROR: API respondio con HTTP {respuesta.status_code}"
+
+    datos = respuesta.json()
+    main = datos["main"]
+    viento = datos.get("wind", {})
+    clima_str = datos["weather"][0]["description"]
+
+    return (
+        f"Ciudad: {datos['name']}, {datos.get('sys', {}).get('country', '')}\n"
+        f"Clima: {clima_str}\n"
+        f"Temperatura: {main['temp']}°C (sensacion: {main['feels_like']}°C)\n"
+        f"Min/Max: {main['temp_min']}°C / {main['temp_max']}°C\n"
+        f"Humedad: {main['humidity']}%\n"
+        f"Viento: {viento.get('speed', 'N/A')} m/s"
+    )
+
+
 def ver_logs(lineas: int = 20) -> str:
     try:
         with open(_log_file, "r", encoding="utf-8") as f:
@@ -208,4 +375,9 @@ TOOL_FUNCTIONS = {
     "recuperar": recuperar,
     "listar_recuerdos": listar_recuerdos,
     "ver_logs": ver_logs,
+    "fecha_hora": fecha_hora,
+    "tree": tree,
+    "descargar_url": descargar_url,
+    "notas": notas,
+    "clima": clima,
 }

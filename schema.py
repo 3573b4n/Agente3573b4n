@@ -128,6 +128,89 @@ TOOLS_SCHEMA = [
                 }
             },
             {
+                "name": "fecha_hora",
+                "description": "Devuelve la fecha y hora actual en una zona horaria. Si no se especifica zona, usa Europe/Madrid.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "zona": {
+                            "type": "string",
+                            "description": "Zona horaria, ej: 'Europe/Madrid', 'America/Argentina/Buenos_Aires', 'UTC'."
+                        }
+                    }
+                }
+            },
+            {
+                "name": "tree",
+                "description": "Muestra el arbol de directorios desde una ruta, con conectores graficos (├── └── │).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "ruta": {
+                            "type": "string",
+                            "description": "Directorio raiz, ej: '.', 'src'."
+                        },
+                        "max_nivel": {
+                            "type": "integer",
+                            "description": "Profundidad maxima del arbol. Default: 7."
+                        }
+                    }
+                }
+            },
+            {
+                "name": "descargar_url",
+                "description": "Descarga el contenido de una URL (pagina web, API, etc.). Maximo 100KB. Timeout configurable.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "URL completa a descargar, ej: 'https://example.com'."
+                        },
+                        "timeout": {
+                            "type": "integer",
+                            "description": "Segundos maximos de espera. Default: 15."
+                        }
+                    },
+                    "required": ["url"]
+                }
+            },
+            {
+                "name": "notas",
+                "description": "Gestiona notas personales: listar, agregar o borrar. Las notas persisten entre sesiones en notas.json.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "accion": {
+                            "type": "string",
+                            "description": "Accion: 'listar' (muestra todas), 'agregar' (anade una nota), 'borrar' (elimina por indice). Default: listar."
+                        },
+                        "texto": {
+                            "type": "string",
+                            "description": "Texto de la nota (requerido para accion=agregar)."
+                        },
+                        "indice": {
+                            "type": "integer",
+                            "description": "Indice de la nota a borrar (requerido para accion=borrar). 1-based."
+                        }
+                    }
+                }
+            },
+            {
+                "name": "clima",
+                "description": "Consulta el clima actual de una ciudad via OpenWeatherMap. Necesita la variable OPENWEATHER_API_KEY.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "ciudad": {
+                            "type": "string",
+                            "description": "Nombre de la ciudad, ej: 'Madrid', 'Buenos Aires', 'London'."
+                        }
+                    },
+                    "required": ["ciudad"]
+                }
+            },
+            {
                 "name": "ver_logs",
                 "description": "Lee las ultimas N lineas del archivo de log del agente. Usalo para diagnosticar problemas y entender que hizo el agente.",
                 "parameters": {
