@@ -1,5 +1,25 @@
 # Agente 3573b4n
 
+**[🇬🇧 English](#-english-summary) · [🇪🇸 Español](#descripción-del-proyecto)**
+
+## 🇬🇧 English summary
+
+Conversational agent in Python powered by **Google Gemini 2.5 Flash**. It runs a continuous
+reasoning loop: the model decides whether to answer directly or call one of **9 built-in
+tools** (file read/write, directory listing, regex search, and OS commands restricted by a
+**security whitelist**), executes them and reasons over the results until it produces a final
+answer. State (key-value memories + conversation history) persists to JSON. Provider access is
+abstracted in `llm.py`, so the LLM backend can be swapped without touching the rest of the
+code. Ships with **17 tests** (5 static + 12 unit) that run without an API key.
+
+- **Stack:** Python · Gemini API (function calling) · JSON persistence
+- **Run:** `python agente.py` (requires `GEMINI_API_KEY` env var)
+- **Tests:** `python test_estatico.py` · `python test_tools.py`
+
+Full documentation in Spanish below.
+
+---
+
 ## Descripción del Proyecto
 Agente conversacional en Python, potenciado por Google Gemini 2.5 Flash. Puede interactuar con el usuario, decidir cuándo usar herramientas para actuar sobre el sistema de archivos y el sistema operativo, ejecutarlas y razonar con los resultados.
 
