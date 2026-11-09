@@ -1,228 +1,86 @@
-TOOLS_SCHEMA = [
-    {
-        "function_declarations": [
-            {
-                "name": "leer_archivo",
-                "description": "Lee el contenido de un archivo de texto.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "ruta": {
-                            "type": "string",
-                            "description": "Ruta del archivo a leer, ej: 'main.py' o 'src/utils.py'."
-                        }
-                    },
-                    "required": ["ruta"]
-                }
-            },
-            {
-                "name": "listar_directorio",
-                "description": "Lista los archivos y carpetas de un directorio.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "ruta": {
-                            "type": "string",
-                            "description": "Ruta del directorio a listar. Default: '.' (directorio actual)."
-                        }
-                    },
-                    "required": []
-                }
-            },
-            {
-                "name": "escribir_archivo",
-                "description": "Crea o sobrescribe un archivo de texto. Si el archivo ya existe, su contenido se reemplaza por completo.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "ruta": {
-                            "type": "string",
-                            "description": "Ruta del archivo a escribir. Puede ser relativa ('notas.txt') o absoluta ('C:\\Users\\algo\\archivo.py')."
-                        },
-                        "contenido": {
-                            "type": "string",
-                            "description": "El texto completo a escribir en el archivo. Reemplaza cualquier contenido previo."
-                        }
-                    },
-                    "required": ["ruta", "contenido"]
-                }
-            },
-            {
-                "name": "correr_comando",
-                "description": "Ejecuta un comando del sistema operativo de forma segura. Solo permite comandos de una whitelist (python, pip, dir, ls, type, cat, echo, mkdir, git status/log/diff/branch/show/ls-files). El comando corre en el directorio actual de ejecucion.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "comando": {
-                            "type": "string",
-                            "description": "Comando completo a ejecutar, ej: 'python test.py', 'dir C:\\Users', 'git status', 'echo hola'."
-                        },
-                        "timeout": {
-                            "type": "integer",
-                            "description": "Segundos maximos de espera. Default: 30. Si el comando tarda mas, se cancela."
-                        }
-                    },
-                    "required": ["comando"]
-                }
-            },
-            {
-                "name": "buscar_texto",
-                "description": "Busca un pattern (regex) en archivos de texto. Devuelve coincidencias con archivo:linea:contenido. Parametros opcionales: extension para filtrar (ej: '*.py'). Limita a 50 resultados.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "pattern": {
-                            "type": "string",
-                            "description": "Regex a buscar, ej: 'def\\\\s+\\\\w+', 'TODO', 'import.*requests'."
-                        },
-                        "ruta": {
-                            "type": "string",
-                            "description": "Directorio base a buscar. Default: '.' (actual)."
-                        },
-                        "extension": {
-                            "type": "string",
-                            "description": "Filtro por extension, ej: '*.py', '*.txt'. Default: todos."
-                        }
-                    },
-                    "required": ["pattern"]
-                }
-            },
-            {
-                "name": "recordar",
-                "description": "Guarda un recuerdo persistente (clave=valor). El agente recuerda este dato entre sesiones. Usalo cuando el usuario te pida recordar algo.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "clave": {
-                            "type": "string",
-                            "description": "Nombre del recuerdo, ej: 'nombre_del_usuario', 'proyecto_favorito'."
-                        },
-                        "valor": {
-                            "type": "string",
-                            "description": "Valor a recordar, ej: 'Juan', 'mi-agente'."
-                        }
-                    },
-                    "required": ["clave", "valor"]
-                }
-            },
-            {
-                "name": "recuperar",
-                "description": "Recupera un recuerdo guardado previamente por su clave. Usalo cuando el usuario te pregunte algo que deberias recordar.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "clave": {
-                            "type": "string",
-                            "description": "Clave del recuerdo a recuperar, ej: 'nombre_del_usuario'."
-                        }
-                    },
-                    "required": ["clave"]
-                }
-            },
-            {
-                "name": "listar_recuerdos",
-                "description": "Lista todos los recuerdos guardados. Usalo para mostrar al usuario todo lo que el agente recuerda.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {}
-                }
-            },
-            {
-                "name": "fecha_hora",
-                "description": "Devuelve la fecha y hora actual en una zona horaria. Si no se especifica zona, usa Europe/Madrid.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "zona": {
-                            "type": "string",
-                            "description": "Zona horaria, ej: 'Europe/Madrid', 'America/Argentina/Buenos_Aires', 'UTC'."
-                        }
-                    }
-                }
-            },
-            {
-                "name": "tree",
-                "description": "Muestra el arbol de directorios desde una ruta, con conectores graficos (├── └── │).",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "ruta": {
-                            "type": "string",
-                            "description": "Directorio raiz, ej: '.', 'src'."
-                        },
-                        "max_nivel": {
-                            "type": "integer",
-                            "description": "Profundidad maxima del arbol. Default: 7."
-                        }
-                    }
-                }
-            },
-            {
-                "name": "descargar_url",
-                "description": "Descarga el contenido de una URL (pagina web, API, etc.). Maximo 100KB. Timeout configurable.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "URL completa a descargar, ej: 'https://example.com'."
-                        },
-                        "timeout": {
-                            "type": "integer",
-                            "description": "Segundos maximos de espera. Default: 15."
-                        }
-                    },
-                    "required": ["url"]
-                }
-            },
-            {
-                "name": "notas",
-                "description": "Gestiona notas personales: listar, agregar o borrar. Las notas persisten entre sesiones en notas.json.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "accion": {
-                            "type": "string",
-                            "description": "Accion: 'listar' (muestra todas), 'agregar' (anade una nota), 'borrar' (elimina por indice). Default: listar."
-                        },
-                        "texto": {
-                            "type": "string",
-                            "description": "Texto de la nota (requerido para accion=agregar)."
-                        },
-                        "indice": {
-                            "type": "integer",
-                            "description": "Indice de la nota a borrar (requerido para accion=borrar). 1-based."
-                        }
-                    }
-                }
-            },
-            {
-                "name": "clima",
-                "description": "Consulta el clima actual de una ciudad via OpenWeatherMap. Necesita la variable OPENWEATHER_API_KEY.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "ciudad": {
-                            "type": "string",
-                            "description": "Nombre de la ciudad, ej: 'Madrid', 'Buenos Aires', 'London'."
-                        }
-                    },
-                    "required": ["ciudad"]
-                }
-            },
-            {
-                "name": "ver_logs",
-                "description": "Lee las ultimas N lineas del archivo de log del agente. Usalo para diagnosticar problemas y entender que hizo el agente.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "lineas": {
-                            "type": "integer",
-                            "description": "Cuantas lineas leer desde el final. Default: 20."
-                        }
-                    }
-                }
-            }
-        ]
+"""
+Schema de herramientas para Gemini (function_declarations).
+
+Este módulo genera automáticamente el schema a partir de las funciones
+en tools.TOOL_FUNCTIONS, así que no hace falta mantener schema.py en paralelo.
+"""
+
+import inspect
+from typing import get_type_hints, get_origin
+from tools import TOOL_FUNCTIONS
+
+
+# ---------------------------------------------------------------------------
+# Mapeo de tipos Python -> JSON Schema
+# ---------------------------------------------------------------------------
+TIPO_MAP = {
+    str: "string",
+    int: "integer",
+    float: "number",
+    bool: "boolean",
+    list: "array",
+    dict: "object",
+}
+
+
+def _python_a_json_tipo(tipo) -> str:
+    """Convierte un tipo Python a su equivalente en JSON Schema."""
+    if tipo in TIPO_MAP:
+        return TIPO_MAP[tipo]
+    origin = get_origin(tipo)
+    if origin and origin in TIPO_MAP:
+        return TIPO_MAP[origin]
+    return "string"  # fallback
+
+
+def _generar_schema_tool(func) -> dict:
+    """Genera el schema Gemini para una sola herramienta."""
+    nombre = func.__name__
+    doc = func.__doc__ or ""
+    descripcion = doc.strip().split("\n")[0].strip()
+
+    sig = inspect.signature(func)
+    properties = {}
+    required = []
+
+    for nombre_param, parametro in sig.parameters.items():
+        if nombre_param == "self":
+            continue
+
+        try:
+            hints = get_type_hints(func)
+            tipo = hints.get(nombre_param, str)
+            json_tipo = _python_a_json_tipo(tipo)
+        except (TypeError, NameError):
+            json_tipo = "string"
+
+        propiedades_param = {"type": json_tipo}
+
+        if parametro.default is not inspect.Parameter.empty:
+            propiedades_param["description"] = f"Default: {parametro.default}"
+        else:
+            required.append(nombre_param)
+
+        properties[nombre_param] = propiedades_param
+
+    return {
+        "name": nombre,
+        "description": descripcion,
+        "parameters": {
+            "type": "object",
+            "properties": properties,
+            "required": required if required else [],
+        },
     }
-]
+
+
+def generar_tools_schema() -> list:
+    """Genera todo el TOOLS_SCHEMA automáticamente desde TOOL_FUNCTIONS."""
+    functions = []
+    for nombre, func in sorted(TOOL_FUNCTIONS.items()):
+        functions.append(_generar_schema_tool(func))
+    return [{"function_declarations": functions}]
+
+
+# Schema generado (se usa en agente.py)
+TOOLS_SCHEMA = generar_tools_schema()

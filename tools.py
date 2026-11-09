@@ -49,7 +49,7 @@ def _comando_permitido(comando: str) -> tuple[bool, str]:
             return False, f"comando peligroso detectado: '{peligroso}'"
     for permitido in WHITELIST_COMANDOS:
         if cmd_lower.startswith(permitido):
-            resto = cmd_lower[len(permitido):]
+            resto = cmd_lower[len(permitido) :]
             if resto == "" or resto[0] in (" ", "\t"):
                 return True, "OK"
     return False, f"comando '{comando}' no esta en la whitelist"
@@ -59,7 +59,9 @@ def _comando_permitido(comando: str) -> tuple[bool, str]:
 # Herramientas
 # ---------------------------------------------------------------------------
 
+
 def leer_archivo(ruta: str) -> str:
+    """Lee el contenido de un archivo de texto del disco."""
     try:
         with open(ruta, "r", encoding="utf-8") as f:
             return f.read()
@@ -70,6 +72,7 @@ def leer_archivo(ruta: str) -> str:
 
 
 def listar_directorio(ruta: str = ".") -> str:
+    """Lista los archivos y carpetas de un directorio."""
     try:
         entries = os.listdir(ruta)
         dirs = [d + "/" for d in entries if os.path.isdir(os.path.join(ruta, d))]
@@ -82,6 +85,7 @@ def listar_directorio(ruta: str = ".") -> str:
 
 
 def escribir_archivo(ruta: str, contenido: str) -> str:
+    """Crea o sobrescribe un archivo de texto con el contenido dado."""
     try:
         directorio_padre = os.path.dirname(ruta)
         if directorio_padre and not os.path.exists(directorio_padre):
@@ -94,10 +98,12 @@ def escribir_archivo(ruta: str, contenido: str) -> str:
 
 
 def correr_comando(comando: str, timeout: int = 30) -> str:
+    """Ejecuta un comando del sistema operativo de forma segura (whitelist activa)."""
     permitido, motivo = _comando_permitido(comando)
     if not permitido:
         return f"ERROR: comando rechazado. Motivo: {motivo}"
     import subprocess
+
     try:
         resultado = subprocess.run(
             comando,
@@ -113,7 +119,10 @@ def correr_comando(comando: str, timeout: int = 30) -> str:
             salida += f"\n[STDERR]\n{resultado.stderr}"
         MAX_SALIDA = 4000
         if len(salida) > MAX_SALIDA:
-            salida = salida[:MAX_SALIDA] + f"\n[... truncado, {len(salida) - MAX_SALIDA} caracteres mas]"
+            salida = (
+                salida[:MAX_SALIDA]
+                + f"\n[... truncado, {len(salida) - MAX_SALIDA} caracteres mas]"
+            )
         return f"[exit code {resultado.returncode}]\n{salida}"
     except subprocess.TimeoutExpired:
         return f"ERROR: el comando supero el timeout de {timeout} segundos y fue cancelado."
@@ -122,8 +131,10 @@ def correr_comando(comando: str, timeout: int = 30) -> str:
 
 
 def buscar_texto(pattern: str, ruta: str = ".", extension: str = None) -> str:
+    """Busca un patron (regex) en archivos de texto y devuelve las coincidencias."""
     import re
     import glob
+
     try:
         regex = re.compile(pattern)
     except re.error as e:
@@ -137,7 +148,11 @@ def buscar_texto(pattern: str, ruta: str = ".", extension: str = None) -> str:
             for f in files:
                 archivos.append(os.path.join(root, f))
     if not archivos:
-        return f"(sin archivos en {ruta}" + (f" con extension {extension}" if extension else "") + ")"
+        return (
+            f"(sin archivos en {ruta}"
+            + (f" con extension {extension}" if extension else "")
+            + ")"
+        )
     resultados = []
     MAX_RESULTADOS = 50
     for archivo in archivos:
@@ -166,6 +181,7 @@ def buscar_texto(pattern: str, ruta: str = ".", extension: str = None) -> str:
 
 
 def recordar(clave: str, valor: str) -> str:
+    """Guarda un recuerdo persistente (clave=valor) entre sesiones."""
     memoria = cargar_memoria()
     memoria[clave] = valor
     guardar_memoria(memoria)
@@ -173,6 +189,7 @@ def recordar(clave: str, valor: str) -> str:
 
 
 def recuperar(clave: str) -> str:
+    """Recupera un recuerdo guardado previamente por su clave."""
     memoria = cargar_memoria()
     valor = memoria.get(clave)
     if valor is None:
@@ -181,6 +198,7 @@ def recuperar(clave: str) -> str:
 
 
 def listar_recuerdos() -> str:
+    """Lista todos los recuerdos guardados."""
     memoria = cargar_memoria()
     if not memoria:
         return "(no tengo recuerdos guardados)"
@@ -188,13 +206,17 @@ def listar_recuerdos() -> str:
 
 
 def fecha_hora(zona: str = "Europe/Madrid") -> str:
+    """Devuelve la fecha y hora actual en una zona horaria especificada."""
     from datetime import datetime
+
     try:
         from zoneinfo import ZoneInfo
+
         tz = ZoneInfo(zona)
     except (ImportError, KeyError):
         try:
             import pytz
+
             tz = pytz.timezone(zona)
         except ImportError:
             return f"ERROR: zona '{zona}' no disponible (sin zoneinfo ni pytz)"
@@ -208,6 +230,7 @@ def fecha_hora(zona: str = "Europe/Madrid") -> str:
 
 
 def tree(ruta: str = ".", max_nivel: int = 7) -> str:
+    """Muestra el arbol de directorios con conectores graficos."""
     from pathlib import Path
 
     raiz = Path(ruta)
@@ -249,15 +272,16 @@ def tree(ruta: str = ".", max_nivel: int = 7) -> str:
 
 
 def descargar_url(url: str, timeout: int = 15) -> str:
+    """Descarga el contenido de una URL (maximo 100KB)."""
     import requests
 
     if not url.startswith(("http://", "https://")):
         return f"ERROR: URL debe empezar con http:// o https://"
 
     try:
-        respuesta = requests.get(url, timeout=timeout, headers={
-            "User-Agent": "Agente3573b4n/1.0"
-        })
+        respuesta = requests.get(
+            url, timeout=timeout, headers={"User-Agent": "Agente3573b4n/1.0"}
+        )
     except requests.exceptions.Timeout:
         return f"ERROR: la URL no respondio en {timeout}s"
     except requests.exceptions.ConnectionError:
@@ -278,13 +302,14 @@ def descargar_url(url: str, timeout: int = 15) -> str:
 
 
 def notas(accion: str = "listar", texto: str = "", indice: int = None) -> str:
+    """Gestiona notas personales: listar, agregar o borrar."""
     n = Notas()
 
     if accion == "listar":
         datos = n.listar()
         if not datos:
             return "(no hay notas guardadas)"
-        return "\n".join(f"{i+1}. {nota}" for i, nota in enumerate(datos))
+        return "\n".join(f"{i + 1}. {nota}" for i, nota in enumerate(datos))
 
     if accion == "agregar":
         return n.agregar(texto)
@@ -296,6 +321,7 @@ def notas(accion: str = "listar", texto: str = "", indice: int = None) -> str:
 
 
 def clima(ciudad: str) -> str:
+    """Consulta el clima actual de una ciudad via OpenWeatherMap."""
     import requests
 
     api_key = os.environ.get("OPENWEATHER_API_KEY")
@@ -338,6 +364,7 @@ def clima(ciudad: str) -> str:
 
 
 def ver_logs(lineas: int = 20) -> str:
+    """Lee las ultimas N lineas del archivo de log del agente."""
     try:
         with open(_log_file, "r", encoding="utf-8") as f:
             todas = f.readlines()
