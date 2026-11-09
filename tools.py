@@ -2,6 +2,7 @@ import os
 
 from config import logger, _log_file
 from memory import cargar_memoria, guardar_memoria
+from notas import Notas
 
 
 # ---------------------------------------------------------------------------
@@ -277,36 +278,19 @@ def descargar_url(url: str, timeout: int = 15) -> str:
 
 
 def notas(accion: str = "listar", texto: str = "", indice: int = None) -> str:
-    import json
-    from pathlib import Path
-
-    ruta = Path(__file__).parent / "notas.json"
-    if not ruta.exists():
-        ruta.write_text("[]", encoding="utf-8")
-    datos = json.loads(ruta.read_text(encoding="utf-8"))
+    n = Notas()
 
     if accion == "listar":
+        datos = n.listar()
         if not datos:
             return "(no hay notas guardadas)"
-        return "\n".join(f"{i+1}. {n}" for i, n in enumerate(datos))
+        return "\n".join(f"{i+1}. {nota}" for i, nota in enumerate(datos))
 
     if accion == "agregar":
-        if not texto.strip():
-            return "ERROR: texto vacio, no se puede agregar"
-        datos.append(texto.strip())
-        ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
-        return f"OK: nota {len(datos)} agregada"
+        return n.agregar(texto)
 
     if accion == "borrar":
-        if not datos:
-            return "ERROR: no hay notas para borrar"
-        if indice is None:
-            return "ERROR: falta indice para borrar"
-        if indice < 1 or indice > len(datos):
-            return f"ERROR: indice {indice} fuera de rango (1-{len(datos)})"
-        borrada = datos.pop(indice - 1)
-        ruta.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
-        return f"OK: nota {indice} borrada ('{borrada}')"
+        return n.borrar(indice)
 
     return f"ERROR: accion desconocida '{accion}'. Usa: listar, agregar, borrar"
 

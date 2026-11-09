@@ -37,7 +37,8 @@ El agente opera en un bucle continuo:
 | `agente.py` | Entry point ~120 líneas. API key, inicialización del modelo, loop principal, ejecutor de tools. Re-exporta símbolos para tests. |
 | `config.py` | Logger global, system prompt (`SISTEMA`), rutas de archivos de persistencia. |
 | `memory.py` | Persistencia de recuerdos clave-valor (`memoria.json`) e historial de conversación (`historial.json`). |
-| `tools.py` | Implementación de las 9 herramientas + whitelist/blacklist de seguridad + `TOOL_FUNCTIONS`. |
+| `tools.py` | Implementación de las herramientas + whitelist/blacklist de seguridad + `TOOL_FUNCTIONS`. |
+| `notas.py` | Clase `Notas`: CRUD de notas personales con persistencia en `notas.json`. Primer ejemplo de OOP del proyecto. |
 | `schema.py` | `TOOLS_SCHEMA` con las declaraciones en formato `function_declarations` que consume la API de Gemini. |
 | `llm.py` | Wrapper para abstraer el proveedor de LLM (actualmente Gemini). Permite cambiar de modelo sin tocar el resto. |
 

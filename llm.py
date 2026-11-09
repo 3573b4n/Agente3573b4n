@@ -29,12 +29,15 @@ Uso:
 import os
 from typing import Any
 
+
 # ---------------------------------------------------------------------------
 # Excepciones custom
 # ---------------------------------------------------------------------------
 class LLMError(Exception):
     """Error generico del wrapper de LLM."""
+
     pass
+
 
 # ---------------------------------------------------------------------------
 # Implementacion de cada proveedor
@@ -47,9 +50,15 @@ class GeminiProvider:
 
     def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash"):
         # Si no pasamos key, la buscamos en variable de entorno
-        self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        self.api_key = (
+            api_key
+            or os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+        )
         if not self.api_key:
-            raise LLMError("Falta GEMINI_API_KEY o GOOGLE_API_KEY en variables de entorno")
+            raise LLMError(
+                "Falta GEMINI_API_KEY o GOOGLE_API_KEY en variables de entorno"
+            )
 
         self.model = model
 
@@ -57,19 +66,20 @@ class GeminiProvider:
         try:
             from google import genai
             from google.genai import types
+
             self.genai = genai
             self.types = types
             self.client = genai.Client(api_key=self.api_key)
         except ImportError as e:
-            raise LLMError("Falta instalar google-genai: pip install google-genai") from e
+            raise LLMError(
+                "Falta instalar google-genai: pip install google-genai"
+            ) from e
 
     def generar(self, contents, config):
         """
         Llama al modelo de Gemini con el historial y la config.
         Devuelve el objeto response crudo de google-genai.
         """
-        # La config que pasamos es un dict con system_instruction y tools
-        # Hay que convertirlo al formato que espera Gemini.
         genai_config = self.types.GenerateContentConfig(
             system_instruction=config.get("system_instruction", ""),
             tools=config.get("tools", []),
@@ -84,6 +94,27 @@ class GeminiProvider:
             return response
         except Exception as e:
             raise LLMError(f"Error llamando a Gemini: {e}") from e
+
+    def generar_streaming(self, contents, config):
+        """
+        Llama al modelo de Gemini con streaming.
+        Devuelve un iterable que emite chunks parciales mientras se genera la respuesta.
+        Cada chunk tiene .text con el fragmento disponible.
+        """
+        genai_config = self.types.GenerateContentConfig(
+            system_instruction=config.get("system_instruction", ""),
+            tools=config.get("tools", []),
+        )
+
+        try:
+            stream = self.client.models.generate_content_stream(
+                model=self.model,
+                contents=contents,
+                config=genai_config,
+            )
+            return stream
+        except Exception as e:
+            raise LLMError(f"Error llamando a Gemini (streaming): {e}") from e
 
     def extraer_texto(self, response) -> str:
         """Extrae el texto de una respuesta de Gemini."""
@@ -110,11 +141,15 @@ class GeminiProvider:
 
         for part in parts:
             if hasattr(part, "function_call") and part.function_call:
-                tool_calls.append({
-                    "name": part.function_call.name,
-                    "args": dict(part.function_call.args) if part.function_call.args else {},
-                    "raw_part": part,  # necesitamos el part crudo para el historial
-                })
+                tool_calls.append(
+                    {
+                        "name": part.function_call.name,
+                        "args": dict(part.function_call.args)
+                        if part.function_call.args
+                        else {},
+                        "raw_part": part,  # necesitamos el part crudo para el historial
+                    }
+                )
         return tool_calls
 
     def tiene_tool_calls(self, response) -> bool:
@@ -123,10 +158,7 @@ class GeminiProvider:
             parts = response.candidates[0].content.parts
             if parts is None:
                 return False
-            return any(
-                hasattr(p, "function_call") and p.function_call
-                for p in parts
-            )
+            return any(hasattr(p, "function_call") and p.function_call for p in parts)
         except (IndexError, AttributeError, TypeError):
             return False
 
@@ -148,10 +180,12 @@ class GeminiProvider:
         """Crea un Content con role='user' y function_response."""
         return self.types.Content(
             role="user",
-            parts=[self.types.Part.from_function_response(
-                name=tool_name,
-                response={"result": resultado},
-            )],
+            parts=[
+                self.types.Part.from_function_response(
+                    name=tool_name,
+                    response={"result": resultado},
+                )
+            ],
         )
 
     def crear_mensaje(self, role: str, texto: str):
@@ -212,6 +246,9 @@ class LLM:
     def crear_mensaje_tool_response(self, tool_name: str, resultado: str):
         return self._impl.crear_mensaje_tool_response(tool_name, resultado)
 
+    def generar_streaming(self, contents, config):
+        return self._impl.generar_streaming(contents, config)
+
 
 # ---------------------------------------------------------------------------
 # Test rapido para verificar que el wrapper funciona
@@ -224,6 +261,8 @@ if __name__ == "__main__":
         modelo = LLM(proveedor="gemini")
         print("OK: GeminiProvider inicializado")
         print(f"  Modelo: {modelo._impl.model}")
-        print(f"  API key: {modelo._impl.api_key[:10]}...{(modelo._impl.api_key or '')[-4:]}")
+        print(
+            f"  API key: {modelo._impl.api_key[:10]}...{(modelo._impl.api_key or '')[-4:]}"
+        )
     except LLMError as e:
         print(f"ERROR: {e}")

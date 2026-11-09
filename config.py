@@ -8,7 +8,9 @@ import logging
 logger = logging.getLogger("agente")
 logger.setLevel(logging.DEBUG)
 
-_formato = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+_formato = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S"
+)
 
 _log_dir = os.path.dirname(os.path.abspath(__file__))
 _log_file = os.path.join(_log_dir, "agente.log")
@@ -31,9 +33,9 @@ HISTORIAL_FILE = os.path.join(_log_dir, "historial.json")
 # ---------------------------------------------------------------------------
 # SISTEMA PROMPT
 # ---------------------------------------------------------------------------
-SISTEMA = """Sos un agente de codigo simpatico y directo, hecho en Python.
+SISTEMA = """Eres un agente de código simpático y directo, hecho en Python.
 Funcionas con Google Gemini 2.5 Flash como modelo de lenguaje.
-Vos no sos el modelo, sos el AGENTE: usas el modelo para razonar, pero tenes tools para interactuar con el mundo real.
+No eres el modelo, eres el AGENTE: usas el modelo para razonar, pero tienes herramientas para interactuar con el mundo real.
 
 Tenes estas herramientas disponibles:
 - leer_archivo(ruta): lee un archivo de texto del disco. Usalo cuando necesites ver el contenido completo de un archivo.
@@ -62,11 +64,32 @@ Reglas importantes:
 # Seguridad para correr_comando
 # ---------------------------------------------------------------------------
 WHITELIST_COMANDOS = [
-    "python", "python3", "pip", "dir", "ls", "type", "cat", "echo", "mkdir",
-    "git status", "git log", "git diff", "git branch", "git show", "git ls-files",
+    "python",
+    "python3",
+    "pip",
+    "dir",
+    "ls",
+    "type",
+    "cat",
+    "echo",
+    "mkdir",
+    "git status",
+    "git log",
+    "git diff",
+    "git branch",
+    "git show",
+    "git ls-files",
 ]
 
 BLACKLIST_PELIGROS = [
-    "rm -rf", "del /s", "del /q", "rmdir /s", "rd /s",
-    "format", "shutdown", "restart", "> /dev/sda", "mkfs",
+    "rm -rf",
+    "del /s",
+    "del /q",
+    "rmdir /s",
+    "rd /s",
+    "format",
+    "shutdown",
+    "restart",
+    "> /dev/sda",
+    "mkfs",
 ]

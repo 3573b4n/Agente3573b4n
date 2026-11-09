@@ -33,7 +33,12 @@ import sys
 from llm import LLM, LLMError
 
 from config import logger, SISTEMA
-from memory import cargar_memoria, guardar_memoria, cargar_historial_previo, guardar_historial
+from memory import (
+    cargar_memoria,
+    guardar_memoria,
+    cargar_historial_previo,
+    guardar_historial,
+)
 from tools import (
     TOOL_FUNCTIONS,
     WHITELIST_COMANDOS,
@@ -90,7 +95,10 @@ def main():
     memoria = cargar_memoria()
     if memoria:
         recuerdos_str = "\n".join(f"- {k}: {v}" for k, v in memoria.items())
-        sistema_completo = SISTEMA.replace('"""', "") + f"\nRecuerdos de sesiones anteriores:\n{recuerdos_str}\n"
+        sistema_completo = (
+            SISTEMA.replace('"""', "")
+            + f"\nRecuerdos de sesiones anteriores:\n{recuerdos_str}\n"
+        )
     else:
         sistema_completo = SISTEMA
 
@@ -140,18 +148,69 @@ def main():
             iteraciones += 1
 
             try:
-                response = modelo.generar(contents=historial, config=config)
+                # Usar streaming para respuesta incremental
+                stream = modelo.generar_streaming(contents=historial, config=config)
             except LLMError as e:
                 logger.error(f"Error API: {e}")
-                print(f"  [ERROR API] {e}")
+                print(f"\n  [ERROR API] {e}\n")
                 break
 
-            if modelo.tiene_tool_calls(response):
-                contenido = modelo.extraer_contenido(response)
+            texto_completo = ""
+            tiene_tool_calls = False
+
+            for chunk in stream:
+                # Verificar si hay function calls en este chunk
+                try:
+                    parts = chunk.candidates[0].content.parts
+                    if parts:
+                        for part in parts:
+                            if hasattr(part, "function_call") and part.function_call:
+                                tiene_tool_calls = True
+                except (IndexError, AttributeError, TypeError):
+                    pass
+
+                # Extraer texto del chunk
+                try:
+                    partes = chunk.candidates[0].content.parts
+                    if partes:
+                        for parte in partes:
+                            if hasattr(parte, "text") and parte.text:
+                                texto_completo += parte.text
+                                print(parte.text, end="", flush=True)
+                except (IndexError, AttributeError, TypeError):
+                    pass
+
+            print()  # salto de linea despues del streaming
+
+            if tiene_tool_calls:
+                # Reconstruir el contenido completo para el historial
+                contenido = None
+                try:
+                    contenido = stream.candidates[0].content
+                except (IndexError, AttributeError):
+                    pass
+
                 if contenido:
                     historial.append(contenido)
 
-                tool_calls = modelo.extraer_tool_calls(response)
+                # Extraer los tool calls del stream completo
+                tool_calls = []
+                try:
+                    parts = stream.candidates[0].content.parts
+                    if parts:
+                        for part in parts:
+                            if hasattr(part, "function_call") and part.function_call:
+                                tool_calls.append(
+                                    {
+                                        "name": part.function_call.name,
+                                        "args": dict(part.function_call.args)
+                                        if part.function_call.args
+                                        else {},
+                                    }
+                                )
+                except (IndexError, AttributeError, TypeError):
+                    pass
+
                 for tc in tool_calls:
                     tool_name = tc["name"]
                     tool_args = tc["args"]
@@ -163,14 +222,12 @@ def main():
                     preview = resultado[:200] + ("..." if len(resultado) > 200 else "")
                     logger.debug(f"[resultado {tool_name}] {preview}")
 
-                    historial.append(modelo.crear_mensaje_tool_response(tool_name, resultado))
+                    historial.append(
+                        modelo.crear_mensaje_tool_response(tool_name, resultado)
+                    )
 
-            else:
-                texto = modelo.extraer_texto(response)
-                contenido = modelo.extraer_contenido(response)
-                if contenido:
-                    historial.append(contenido)
-                print(f"\ntú > {texto}\n")
+            elif texto_completo:
+                print(f"\ntú > {texto_completo.strip()}\n")
                 break
 
         else:
