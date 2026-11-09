@@ -231,8 +231,36 @@ def main():
                 break
 
         else:
-            logger.warning("El agente llego al limite de MAX_ITER sin responder.")
-            print("  [aviso] El agente llego al limite de iteraciones.")
+            # Se alcanzó el límite de iteraciones: forzar respuesta del modelo
+            logger.warning("Límite de MAX_ITER alcanzado, forzando respuesta.")
+            historial.append(
+                modelo.crear_mensaje_usuario(
+                    "[SISTEMA] Has alcanzado el límite de iteraciones. Responde directamente al usuario ahora con un resumen de lo que hiciste."
+                )
+            )
+            try:
+                stream = modelo.generar_streaming(contents=historial, config=config)
+                texto_completo = ""
+                for chunk in stream:
+                    try:
+                        partes = chunk.candidates[0].content.parts
+                        if partes:
+                            for parte in partes:
+                                if hasattr(parte, "text") and parte.text:
+                                    texto_completo += parte.text
+                                    print(parte.text, end="", flush=True)
+                    except (IndexError, AttributeError, TypeError):
+                        pass
+                print()
+                if texto_completo.strip():
+                    print(f"\ntú > {texto_completo.strip()}\n")
+                else:
+                    print(
+                        "\n  [aviso] No pude generar una respuesta en las iteraciones permitidas.\n"
+                    )
+            except LLMError as e:
+                logger.error(f"Error API al forzar respuesta: {e}")
+                print(f"\n  [ERROR API] {e}\n")
 
 
 if __name__ == "__main__":
