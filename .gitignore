@@ -6,6 +6,9 @@ __pycache__/
 venv/
 env/
 
+# Variables de entorno (nunca commit)
+.env
+
 # Datos de sesión del agente
 memoria.json
 historial.json

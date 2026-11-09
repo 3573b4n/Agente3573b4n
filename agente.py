@@ -19,16 +19,30 @@ Instalacion:
   pip install google-genai
 
 Uso:
-  Setea tu API key como variable de entorno:
+  1. Copia .env.example a .env y rellena tu API key:
+       cp .env.example .env
+
+  2. Instala las dependencias:
+       pip install -r requirements.txt
+
+  3. Ejecuta:
+       python agente.py
+
+  (Opcional) Tambien funciona con variables de entorno del sistema:
     Windows PowerShell:  $env:GEMINI_API_KEY = "tu-key-aqui"
     Windows CMD:         set GEMINI_API_KEY=tu-key-aqui
-
-  Despues:
-    python agente.py
 """
 
 import os
 import sys
+
+# Cargar variables de entorno desde .env si existe
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()  # busca .env en el directorio actual y padres
+except ImportError:
+    pass  # Si no está instalado, sigue funcionando con variables del sistema
 
 from llm import LLM, LLMError
 
@@ -63,13 +77,25 @@ from schema import TOOLS_SCHEMA
 API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 if not API_KEY:
     print("ERROR: Falta la variable de entorno GEMINI_API_KEY o GOOGLE_API_KEY")
-    print("  PowerShell: $env:GEMINI_API_KEY = 'tu-key-aqui'")
-    print("  CMD:        set GEMINI_API_KEY=tu-key-aqui")
+    print("  Crea un archivo .env con: cp .env.example .env")
+    print("  Rellena tu API key dentro del archivo.")
+    print("  (Opcional) Tambien funciona con variables del sistema:")
+    print("    PowerShell: $env:GEMINI_API_KEY = 'tu-key-aqui'")
+    print("    CMD:        set GEMINI_API_KEY=tu-key-aqui")
     sys.exit(1)
 
 MODEL_NOMBRE = "gemini-2.5-flash"
+MAX_RETRIES = 3  # intentos antes de fallar definitivamente
+BASE_DELAY = 1.0  # delay base en segundos (exponential backoff)
+
 try:
-    modelo = LLM(proveedor="gemini", api_key=API_KEY, model=MODEL_NOMBRE)
+    modelo = LLM(
+        proveedor="gemini",
+        api_key=API_KEY,
+        model=MODEL_NOMBRE,
+        max_retries=MAX_RETRIES,
+        base_delay=BASE_DELAY,
+    )
 except LLMError as e:
     print(f"ERROR al inicializar el modelo: {e}")
     sys.exit(1)

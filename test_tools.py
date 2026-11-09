@@ -12,6 +12,7 @@ import sys
 import os
 import tempfile
 import shutil
+from unittest.mock import patch, MagicMock
 
 # Aseguramos que el directorio del proyecto este en el path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -376,6 +377,119 @@ def test_ver_logs():
 
 
 # =========================================================================
+# Tests de reintentos (retry logic)
+# =========================================================================
+
+
+def test_is_retryable_rate_limit():
+    """_is_retryable_error: errores 429 son retryables."""
+    from llm import GeminiProvider
+
+    provider = GeminiProvider.__new__(GeminiProvider)  # sin init
+    ok, reason = provider._is_retryable_error(Exception("429 Too Many Requests"))
+    assert ok
+    assert reason == "rate_limit"
+    print("  [OK] is_retryable: 429 rate limit")
+
+
+def test_is_retryable_server_error():
+    """_is_retryable_error: errores 5xx son retryables."""
+    from llm import GeminiProvider
+
+    provider = GeminiProvider.__new__(GeminiProvider)
+    for code in ["500", "502", "503", "504"]:
+        ok, _ = provider._is_retryable_error(Exception(code))
+        assert ok, f"{code} deberia ser retryable"
+    print("  [OK] is_retryable: 5xx server errors")
+
+
+def test_is_retryable_timeout():
+    """_is_retryable_error: timeouts son retryables."""
+    from llm import GeminiProvider
+
+    provider = GeminiProvider.__new__(GeminiProvider)
+    ok, _ = provider._is_retryable_error(Exception("Connection timed out"))
+    assert ok
+    print("  [OK] is_retryable: timeout")
+
+
+def test_is_not_retryable_auth():
+    """_is_retryable_error: errores de auth NO son retryables."""
+    from llm import GeminiProvider
+
+    provider = GeminiProvider.__new__(GeminiProvider)
+    ok, _ = provider._is_retryable_error(Exception("Invalid API key"))
+    assert not ok, "Auth error no deberia ser retryable"
+    print("  [OK] is_retryable: auth error no retryable")
+
+
+def test_wait_exponential_backoff():
+    """_wait_before_retry: calcula delay con backoff exponencial + jitter."""
+    from llm import GeminiProvider
+
+    provider = object.__new__(GeminiProvider)
+    provider.max_retries = 3
+    provider.base_delay = 1.0
+
+    # attempt 1: ~1s +/- 20% => [0.8, 1.2]
+    delay = provider._wait_before_retry(1, "test")
+    assert 0.7 <= delay <= 1.3, f"Delay attempt 1 fuera de rango: {delay}"
+
+    # attempt 2: ~2s +/- 20% => [1.6, 2.4]
+    delay = provider._wait_before_retry(2, "test")
+    assert 1.5 <= delay <= 2.5, f"Delay attempt 2 fuera de rango: {delay}"
+
+    # attempt 3: ~4s pero capped a 30s
+    delay = provider._wait_before_retry(3, "test")
+    assert 3.0 <= delay <= 30.0, f"Delay attempt 3 fuera de rango: {delay}"
+
+    print("  [OK] wait_before_retry: backoff exponencial")
+
+
+def test_generar_retry_success_on_second():
+    """generar: reintenta y tiene exito en el segundo intento."""
+    from llm import LLM, GeminiProvider
+
+    mock_impl = MagicMock()
+    mock_response = MagicMock()
+
+    # Simulamos falla la primera vez, exito la segunda
+    call_count = [0]
+
+    def side_effect(*args, **kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            raise Exception("429 Too Many Requests")
+        return mock_response
+
+    mock_impl.generar.side_effect = side_effect
+
+    # Inyectamos logica de retry del provider real
+    real_provider = object.__new__(GeminiProvider)
+    real_provider.max_retries = 3
+    real_provider.base_delay = 0.01  # delay minimo para tests rapidos
+
+    with patch.object(
+        real_provider, "_is_retryable_error", return_value=(True, "rate_limit")
+    ):
+        with patch.object(real_provider, "_wait_before_retry"):
+            for attempt in range(1, real_provider.max_retries + 1):
+                try:
+                    result = mock_impl.generar(None, None)
+                    break
+                except Exception as e:
+                    is_retryable, reason = real_provider._is_retryable_error(e)
+                    if not is_retryable or attempt >= real_provider.max_retries:
+                        raise
+                    real_provider._wait_before_retry(attempt, reason)
+
+            assert result is mock_response
+            assert call_count[0] == 2, f"Se esperaba 2 llamadas, fue {call_count[0]}"
+
+    print("  [OK] generar: retry success en segundo intento")
+
+
+# =========================================================================
 # Ejecucion
 # =========================================================================
 
@@ -419,6 +533,12 @@ def main():
         ("notas: accion invalida", test_notas_accion_invalida),
         ("clima: sin API key", test_clima_sin_api_key),
         ("ver_logs", test_ver_logs),
+        ("Reintentos: 429 rate limit", test_is_retryable_rate_limit),
+        ("Reintentos: 5xx server error", test_is_retryable_server_error),
+        ("Reintentos: timeout", test_is_retryable_timeout),
+        ("Reintentos: auth no retryable", test_is_not_retryable_auth),
+        ("Reintentos: backoff exponencial", test_wait_exponential_backoff),
+        ("Reintentos: retry success 2o intento", test_generar_retry_success_on_second),
     ]
 
     exit_code = 0

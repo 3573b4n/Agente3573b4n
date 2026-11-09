@@ -27,6 +27,8 @@ Uso:
 """
 
 import os
+import time
+import random
 from typing import Any
 
 
@@ -48,7 +50,13 @@ class GeminiProvider:
     Este es el proveedor que ya venimos usando.
     """
 
-    def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash"):
+    def __init__(
+        self,
+        api_key: str = None,
+        model: str = "gemini-2.5-flash",
+        max_retries: int = 3,
+        base_delay: float = 1.0,
+    ):
         # Si no pasamos key, la buscamos en variable de entorno
         self.api_key = (
             api_key
@@ -61,6 +69,8 @@ class GeminiProvider:
             )
 
         self.model = model
+        self.max_retries = max_retries
+        self.base_delay = base_delay
 
         # Import laziness: solo importamos google.genai si este provider se usa
         try:
@@ -75,46 +85,128 @@ class GeminiProvider:
                 "Falta instalar google-genai: pip install google-genai"
             ) from e
 
+    def _is_retryable_error(self, exception: Exception) -> tuple[bool, str]:
+        """Determina si una excepcion puede ser reintentada."""
+        msg = str(exception).lower()
+
+        # Rate limiting
+        if "429" in msg or "too many requests" in msg or "quota" in msg:
+            return True, "rate_limit"
+
+        # Server errors
+        if "500" in msg or "502" in msg or "503" in msg or "504" in msg:
+            return True, "server_error"
+
+        # Connection errors / timeouts
+        if any(
+            kw in msg
+            for kw in [
+                "timeout",
+                "connection",
+                "temporarily",
+                "unavailable",
+                "service unavailable",
+            ]
+        ):
+            return True, "connection"
+
+        # Generic retryable patterns
+        if any(kw in msg for kw in ["overloaded", "backoff", "throttl"]):
+            return True, "overloaded"
+
+        return False, ""
+
+    def _wait_before_retry(self, attempt: int, reason: str) -> float:
+        """Calcula el tiempo de espera con exponential backoff + jitter."""
+        # Backoff base: 1s, 2s, 4s, 8s...
+        delay = self.base_delay * (2 ** (attempt - 1))
+
+        # Jitter aleatorio +/- 20% para evitar thundering herd
+        jitter = delay * 0.2 * (2 * random.random() - 1)
+        delay += jitter
+
+        # Cap a 30 segundos maximo
+        delay = min(delay, 30.0)
+
+        logger = None
+        try:
+            from config import logger
+        except ImportError:
+            pass
+
+        if logger:
+            logger.info(
+                f"Reintento {attempt}/{self.max_retries} ({reason}) en {delay:.1f}s"
+            )
+
+        time.sleep(delay)
+        return delay
+
     def generar(self, contents, config):
         """
         Llama al modelo de Gemini con el historial y la config.
         Devuelve el objeto response crudo de google-genai.
+        Con reintentos automaticos ante errores transitorios.
         """
         genai_config = self.types.GenerateContentConfig(
             system_instruction=config.get("system_instruction", ""),
             tools=config.get("tools", []),
         )
 
-        try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=contents,
-                config=genai_config,
-            )
-            return response
-        except Exception as e:
-            raise LLMError(f"Error llamando a Gemini: {e}") from e
+        last_exception = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=contents,
+                    config=genai_config,
+                )
+                return response
+            except Exception as e:
+                last_exception = e
+                is_retryable, reason = self._is_retryable_error(e)
+
+                if not is_retryable or attempt >= self.max_retries:
+                    break
+
+                self._wait_before_retry(attempt, reason)
+
+        raise LLMError(
+            f"Error llamando a Gemini despues de {self.max_retries} intentos: {last_exception}"
+        ) from last_exception
 
     def generar_streaming(self, contents, config):
         """
         Llama al modelo de Gemini con streaming.
         Devuelve un iterable que emite chunks parciales mientras se genera la respuesta.
-        Cada chunk tiene .text con el fragmento disponible.
+        Con reintentos automaticos ante errores transitorios.
         """
         genai_config = self.types.GenerateContentConfig(
             system_instruction=config.get("system_instruction", ""),
             tools=config.get("tools", []),
         )
 
-        try:
-            stream = self.client.models.generate_content_stream(
-                model=self.model,
-                contents=contents,
-                config=genai_config,
-            )
-            return stream
-        except Exception as e:
-            raise LLMError(f"Error llamando a Gemini (streaming): {e}") from e
+        last_exception = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                stream = self.client.models.generate_content_stream(
+                    model=self.model,
+                    contents=contents,
+                    config=genai_config,
+                )
+                return stream
+            except Exception as e:
+                last_exception = e
+                is_retryable, reason = self._is_retryable_error(e)
+
+                if not is_retryable or attempt >= self.max_retries:
+                    break
+
+                self._wait_before_retry(attempt, reason)
+
+        raise LLMError(
+            f"Error llamando a Gemini (streaming) despues de {self.max_retries} intentos: {last_exception}"
+        ) from last_exception
 
     def extraer_texto(self, response) -> str:
         """Extrae el texto de una respuesta de Gemini."""
@@ -208,11 +300,21 @@ class LLM:
         response = modelo.generar(contents, config)
     """
 
-    def __init__(self, proveedor: str = "gemini", **kwargs):
+    def __init__(
+        self,
+        proveedor: str = "gemini",
+        max_retries: int = 3,
+        base_delay: float = 1.0,
+        **kwargs,
+    ):
         self.proveedor_nombre = proveedor
+        self.max_retries = max_retries
+        self.base_delay = base_delay
 
         if proveedor == "gemini":
-            self._impl = GeminiProvider(**kwargs)
+            self._impl = GeminiProvider(
+                max_retries=max_retries, base_delay=base_delay, **kwargs
+            )
         # Cuando implementemos otros:
         # elif proveedor == "claude":
         #     self._impl = ClaudeProvider(**kwargs)

@@ -5,15 +5,17 @@
 ## 🇬🇧 English summary
 
 Conversational agent in Python powered by **Google Gemini 2.5 Flash**. It runs a continuous
-reasoning loop: the model decides whether to answer directly or call one of **9 built-in
-tools** (file read/write, directory listing, regex search, and OS commands restricted by a
-**security whitelist**), executes them and reasons over the results until it produces a final
-answer. State (key-value memories + conversation history) persists to JSON. Provider access is
-abstracted in `llm.py`, so the LLM backend can be swapped without touching the rest of the
-code. Ships with **17 tests** (5 static + 12 unit) that run without an API key.
+reasoning loop: the model decides whether to answer directly or call one of **14 built-in
+tools** (file read/write, directory listing, regex search, OS commands restricted by a
+**security whitelist**, personal notes, weather, date/time, URL download, and tree view),
+executes them and reasons over the results until it produces a final answer. State (key-value
+memories + conversation history) persists to JSON. Provider access is abstracted in `llm.py`,
+so the LLM backend can be swapped without touching the rest of the code. Ships with **35 tests**
+(5 static + 30 unit) that run without an API key. Includes streaming responses, automatic retry
+with exponential backoff, and auto-generated tool schemas from docstrings.
 
-- **Stack:** Python · Gemini API (function calling) · JSON persistence
-- **Run:** `python agente.py` (requires `GEMINI_API_KEY` env var)
+- **Stack:** Python · Gemini API (function calling) · JSON persistence · dotenv
+- **Run:** `pip install -r requirements.txt`, copy `.env.example` to `.env`, then `python agente.py`
 - **Tests:** `python test_estatico.py` · `python test_tools.py`
 
 Full documentation in Spanish below.
@@ -34,13 +36,13 @@ El agente opera en un bucle continuo:
 
 | Módulo | Responsabilidad |
 |---|---|
-| `agente.py` | Entry point ~120 líneas. API key, inicialización del modelo, loop principal, ejecutor de tools. Re-exporta símbolos para tests. |
+| `agente.py` | Entry point ~120 líneas. API key (desde .env), inicialización del modelo, loop principal, ejecutor de tools. Re-exporta símbolos para tests. |
 | `config.py` | Logger global, system prompt (`SISTEMA`), rutas de archivos de persistencia. |
 | `memory.py` | Persistencia de recuerdos clave-valor (`memoria.json`) e historial de conversación (`historial.json`). |
-| `tools.py` | Implementación de las herramientas + whitelist/blacklist de seguridad + `TOOL_FUNCTIONS`. |
+| `tools.py` | Implementación de las 14 herramientas + whitelist/blacklist de seguridad + `TOOL_FUNCTIONS`. |
 | `notas.py` | Clase `Notas`: CRUD de notas personales con persistencia en `notas.json`. Primer ejemplo de OOP del proyecto. |
-| `schema.py` | `TOOLS_SCHEMA` con las declaraciones en formato `function_declarations` que consume la API de Gemini. |
-| `llm.py` | Wrapper para abstraer el proveedor de LLM (actualmente Gemini). Permite cambiar de modelo sin tocar el resto. |
+| `schema.py` | Generador automático del schema Gemini a partir de docstrings de `tools.py`. No hay que mantenerlo manualmente. |
+| `llm.py` | Wrapper para abstraer el proveedor de LLM (actualmente Gemini). Incluye reintentos con exponential backoff. Permite cambiar de modelo sin tocar el resto. |
 
 ## Instalación
 
@@ -58,31 +60,39 @@ El agente opera en un bucle continuo:
 
 2.  **Instalar dependencias de Python**:
     ```bash
-    pip install google-generativeai
+    pip install -r requirements.txt
     ```
 
-3.  **Configurar la API Key**:
-    Es **crucial** configurar tu API Key de Google Gemini como una variable de entorno. Esto asegura que tu clave no esté hardcodeada en el código.
+3.  **Configurar las API Keys**:
+    Crea un archivo `.env` a partir del ejemplo y rellena tus claves:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Edita `.env` y reemplaza las keys:
+
+    ```ini
+    GEMINI_API_KEY=tu-api-key-aqui
+    OPENWEATHER_API_KEY=tu-api-key-aqui
+    ```
+
+    (Opcional) Tambien funciona con variables de entorno del sistema:
 
     -   **En PowerShell (Windows):**
         ```powershell
         $env:GEMINI_API_KEY = "TU_API_KEY_AQUI"
-        # O $env:GOOGLE_API_KEY = "TU_API_KEY_AQUI"
         ```
 
     -   **En CMD (Windows):**
         ```cmd
         set GEMINI_API_KEY=TU_API_KEY_AQUI
-        # O set GOOGLE_API_KEY=TU_API_KEY_AQUI
         ```
 
     -   **En Bash/Zsh (Linux/macOS):**
         ```bash
         export GEMINI_API_KEY="TU_API_KEY_AQUI"
-        # O export GOOGLE_API_KEY="TU_API_KEY_AQUI"
         ```
-
-    Reemplaza `"TU_API_KEY_AQUI"` con tu clave real obtenida de Google AI Studio.
 
 ## Herramientas (Tools) Disponibles
 
