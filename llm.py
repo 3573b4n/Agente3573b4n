@@ -86,15 +86,15 @@ class GeminiProvider:
             ) from e
 
     def _is_retryable_error(self, exception: Exception) -> tuple[bool, str]:
-        """Determina si una excepcion puede ser reintentada."""
+        """Determina si una excepcion puede ser reintentada y por que."""
         msg = str(exception).lower()
 
-        # Rate limiting
-        if "429" in msg or "too many requests" in msg or "quota" in msg:
+        # Rate limiting — 429 / quota exceeded
+        if any(kw in msg for kw in ["429", "too many requests", "quota", "rate limit"]):
             return True, "rate_limit"
 
-        # Server errors
-        if "500" in msg or "502" in msg or "503" in msg or "504" in msg:
+        # Server errors — 5xx
+        if any(kw in msg for kw in ["500", "502", "503", "504"]):
             return True, "server_error"
 
         # Connection errors / timeouts
@@ -106,6 +106,8 @@ class GeminiProvider:
                 "temporarily",
                 "unavailable",
                 "service unavailable",
+                "network",
+                "socket",
             ]
         ):
             return True, "connection"
@@ -117,16 +119,32 @@ class GeminiProvider:
         return False, ""
 
     def _wait_before_retry(self, attempt: int, reason: str) -> float:
-        """Calcula el tiempo de espera con exponential backoff + jitter."""
-        # Backoff base: 1s, 2s, 4s, 8s...
-        delay = self.base_delay * (2 ** (attempt - 1))
+        """Calcula el tiempo de espera con exponential backoff + jitter.
+
+        Estrategia por tipo de error:
+          - rate_limit: backoff mas agresivo (1s → 2s → 4s) porque Gemini
+            puede tardar en resetear el contador.
+          - server_error: backoff normal (1s → 2s → 4s).
+          - connection: backoff rapido (0.5s → 1s → 2s) porque suele ser
+            temporal y no penaliza esperar menos.
+        """
+        # Factor base segun tipo de error
+        if reason == "rate_limit":
+            base = self.base_delay * 2
+        elif reason == "connection":
+            base = self.base_delay * 0.5
+        else:
+            base = self.base_delay
+
+        # Exponential backoff: base * 2^(attempt-1)
+        delay = base * (2 ** (attempt - 1))
 
         # Jitter aleatorio +/- 20% para evitar thundering herd
         jitter = delay * 0.2 * (2 * random.random() - 1)
         delay += jitter
 
-        # Cap a 30 segundos maximo
-        delay = min(delay, 30.0)
+        # Cap a 60 segundos maximo (mas generoso que antes)
+        delay = min(delay, 60.0)
 
         logger = None
         try:
@@ -147,6 +165,11 @@ class GeminiProvider:
         Llama al modelo de Gemini con el historial y la config.
         Devuelve el objeto response crudo de google-genai.
         Con reintentos automaticos ante errores transitorios.
+
+        Estrategia de retry:
+          - Detecta tipo de error (rate_limit, server_error, connection)
+          - Aplica backoff diferenciado por tipo
+          - Maximo max_retries intentos con delay creciente + jitter
         """
         genai_config = self.types.GenerateContentConfig(
             system_instruction=config.get("system_instruction", ""),
@@ -180,6 +203,11 @@ class GeminiProvider:
         Llama al modelo de Gemini con streaming.
         Devuelve un iterable que emite chunks parciales mientras se genera la respuesta.
         Con reintentos automaticos ante errores transitorios.
+
+        Estrategia de retry:
+          - Detecta tipo de error (rate_limit, server_error, connection)
+          - Aplica backoff diferenciado por tipo
+          - Maximo max_retries intentos con delay creciente + jitter
         """
         genai_config = self.types.GenerateContentConfig(
             system_instruction=config.get("system_instruction", ""),
