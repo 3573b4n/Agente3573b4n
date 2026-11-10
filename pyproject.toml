@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agente-3573b4n"
+version = "1.2.0"
+description = "Agente conversacional con Gemini 2.5 Flash y herramientas de sistema"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "google-genai>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pyreadline3>=3.4; sys_platform == 'win32'",
+]
+
+[project.scripts]
+agente = "agente:main"
+
+[tool.setuptools.packages.find]
+include = ["agente*"]
+exclude = ["test_*", "*test"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]

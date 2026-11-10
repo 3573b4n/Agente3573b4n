@@ -36,6 +36,17 @@ Uso:
 import os
 import sys
 
+# ---------------------------------------------------------------------------
+# Historial de comandos (readline/pyreadline para flechas ↑↓ y autocompletado)
+# ---------------------------------------------------------------------------
+try:
+    import readline  # Unix
+except ImportError:
+    try:
+        import pyreadline3 as readline  # Windows
+    except ImportError:
+        readline = None
+
 # Cargar variables de entorno desde .env si existe
 try:
     from dotenv import load_dotenv
@@ -147,8 +158,25 @@ def main():
     if textos_previos:
         print(f"  Historial cargado: {len(textos_previos)} mensajes previos")
     print("  Escribi 'salir' para terminar")
+    print("  Usa las flechas ↑↓ para navegar el historial de comandos")
     print("=" * 60)
     print()
+
+    # Registrar historial de comandos en readline
+    _history_file = os.path.join(_log_dir, ".agente_history")
+    if readline:
+        try:
+            readline.read_history_file(_history_file)
+            readline.set_history_length(1000)
+        except FileNotFoundError:
+            pass
+
+    def save_history():
+        if readline:
+            try:
+                readline.write_history_file(_history_file)
+            except Exception:
+                pass
 
     config = {
         "system_instruction": sistema_completo,
@@ -159,14 +187,14 @@ def main():
         try:
             user_input = input("ahora te toca a ti > ").strip()
         except (EOFError, KeyboardInterrupt):
-            guardar_historial(historial)
+            save_history()
             print("\nChau!")
             break
 
         if not user_input:
             continue
         if user_input.lower() in ("salir", "exit", "quit"):
-            guardar_historial(historial)
+            save_history()
             print("Chau!")
             break
 
