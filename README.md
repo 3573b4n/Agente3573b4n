@@ -4,18 +4,11 @@
 
 ## 🇬🇧 English summary
 
-Conversational agent in Python powered by **Google Gemini 2.5 Flash**. It runs a continuous
-reasoning loop: the model decides whether to answer directly or call one of **14 built-in
-tools** (file read/write, directory listing, regex search, OS commands restricted by a
-**security whitelist**, personal notes, weather, date/time, URL download, and tree view),
-executes them and reasons over the results until it produces a final answer. State (key-value
-memories + conversation history) persists to JSON. Provider access is abstracted in `llm.py`,
-so the LLM backend can be swapped without touching the rest of the code. Ships with **35 tests**
-(5 static + 30 unit) that run without an API key. Includes streaming responses, automatic retry
-with exponential backoff, and auto-generated tool schemas from docstrings.
+Conversational agent in Python powered by **Google Gemini 2.5 Flash**. It runs a continuous reasoning loop: the model decides whether to answer directly or call one of **25 built-in tools** (file operations, directory management, regex search, OS commands restricted by a security whitelist, personal notes, weather, date/time, URL download, tree view, Python execution, system info, Git operations), executes them and reasons over the results until it produces a final answer. State (key-value memories with context support + conversation history) persists to JSON. Provider access is abstracted in `llm.py`, so the LLM backend can be swapped without touching the rest of the code. Ships with **45 tests** that run without an API key. Includes streaming responses, automatic retry with exponential backoff, auto-generated tool schemas from docstrings, HTTP web interface, and detailed logging with rotation.
 
 - **Stack:** Python · Gemini API (function calling) · JSON persistence · dotenv
 - **Run:** `pip install -r requirements.txt`, copy `.env.example` to `.env`, then `python agente.py`
+- **Web:** `python web_server.py` (opens http://localhost:8080)
 - **Tests:** `python test_estatico.py` · `python test_tools.py`
 
 Full documentation in Spanish below.
@@ -23,9 +16,11 @@ Full documentation in Spanish below.
 ---
 
 ## Descripción del Proyecto
+
 Agente conversacional en Python, potenciado por Google Gemini 2.5 Flash. Puede interactuar con el usuario, decidir cuándo usar herramientas para actuar sobre el sistema de archivos y el sistema operativo, ejecutarlas y razonar con los resultados.
 
 El agente opera en un bucle continuo:
+
 1. El usuario proporciona una entrada.
 2. El modelo (Gemini) decide si necesita usar una herramienta o si puede responder directamente.
 3. Si el modelo solicita una herramienta, el agente la ejecuta y el resultado se devuelve al modelo.
@@ -36,89 +31,125 @@ El agente opera en un bucle continuo:
 
 | Módulo | Responsabilidad |
 |---|---|
-| `agente.py` | Entry point ~120 líneas. API key (desde .env), inicialización del modelo, loop principal, ejecutor de tools. Re-exporta símbolos para tests. |
-| `config.py` | Logger global, system prompt (`SISTEMA`), rutas de archivos de persistencia. |
-| `memory.py` | Persistencia de recuerdos clave-valor (`memoria.json`) e historial de conversación (`historial.json`). |
-| `tools.py` | Implementación de las 14 herramientas + whitelist/blacklist de seguridad + `TOOL_FUNCTIONS`. |
+| `agente.py` | Entry point ~160 líneas. API key (desde .env), historial de comandos (readline/pyreadline3), inicialización del modelo, loop principal, ejecutor de tools. |
+| `config.py` | Logger global con rotación (5MB max, 3 backups), system prompt estructurado, rutas de archivos de persistencia, whitelist/blacklist de seguridad. |
+| `memory.py` | Persistencia de recuerdos clave-valor con soporte por contexto (`default`, `proyecto-x`, etc.), búsqueda semántica simple, tags opcionales e historial de conversación. |
+| `tools.py` | Implementación de las 25 herramientas + whitelist/blacklist de seguridad + `TOOL_FUNCTIONS`. Incluye herramientas de Git (status, diff, commit, log, branch, stash). |
 | `notas.py` | Clase `Notas`: CRUD de notas personales con persistencia en `notas.json`. Primer ejemplo de OOP del proyecto. |
 | `schema.py` | Generador automático del schema Gemini a partir de docstrings de `tools.py`. No hay que mantenerlo manualmente. |
 | `llm.py` | Wrapper para abstraer el proveedor de LLM (actualmente Gemini). Incluye reintentos con exponential backoff. Permite cambiar de modelo sin tocar el resto. |
+| `web_server.py` | Interfaz HTTP ligera con servidor integrado. Endpoint `/chat` para API y página HTML interactiva en `/`. |
 
 ## Instalación
 
 ### Requisitos
-- Python 3.x
-- Una API Key de Google Gemini.
+
+- Python 3.10+
+- Una API Key de Google Gemini
 
 ### Pasos de Instalación
 
-1.  **Clonar el repositorio** (si aplica, asumiendo que el usuario tiene el proyecto localmente).
-    ```bash
-    git clone <URL_DEL_REPOSITORIO>
-    cd mi-agente
-    ```
+1. **Clonar el repositorio:**
+   ```bash
+   git clone <URL_DEL_REPOSITORIO>
+   cd Agente3573b4n
+   ```
 
-2.  **Instalar dependencias de Python**:
-    ```bash
-    pip install -r requirements.txt
-    ```
+2. **Instalar dependencias:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-3.  **Configurar las API Keys**:
-    Crea un archivo `.env` a partir del ejemplo y rellena tus claves:
+   O usando pyproject.toml:
+   ```bash
+   pip install .
+   ```
 
-    ```bash
-    cp .env.example .env
-    ```
+3. **Configurar las API Keys:**
+   Crea un archivo `.env` a partir del ejemplo y rellena tus claves:
+   ```bash
+   cp .env.example .env
+   ```
 
-    Edita `.env` y reemplaza las keys:
+   Edita `.env` y reemplaza las keys:
+   ```ini
+   GEMINI_API_KEY=tu-api-key-aqui
+   OPENWEATHER_API_KEY=tu-api-key-aqui
+   ```
 
-    ```ini
-    GEMINI_API_KEY=tu-api-key-aqui
-    OPENWEATHER_API_KEY=tu-api-key-aqui
-    ```
+   (Opcional) Tambien funciona con variables de entorno del sistema:
 
-    (Opcional) Tambien funciona con variables de entorno del sistema:
+   - **En PowerShell (Windows):**
+     ```powershell
+     $env:GEMINI_API_KEY = "TU_API_KEY_AQUI"
+     ```
 
-    -   **En PowerShell (Windows):**
-        ```powershell
-        $env:GEMINI_API_KEY = "TU_API_KEY_AQUI"
-        ```
+   - **En CMD (Windows):**
+     ```cmd
+     set GEMINI_API_KEY=TU_API_KEY_AQUI
+     ```
 
-    -   **En CMD (Windows):**
-        ```cmd
-        set GEMINI_API_KEY=TU_API_KEY_AQUI
-        ```
-
-    -   **En Bash/Zsh (Linux/macOS):**
-        ```bash
-        export GEMINI_API_KEY="TU_API_KEY_AQUI"
-        ```
+   - **En Bash/Zsh (Linux/macOS):**
+     ```bash
+     export GEMINI_API_KEY="TU_API_KEY_AQUI"
+     ```
 
 ## Herramientas (Tools) Disponibles
 
 El agente tiene acceso a las siguientes herramientas para interactuar con el entorno:
 
-1.  **`leer_archivo(ruta)`**: Lee el contenido de un archivo de texto del disco.
-    -   **Parámetros**: `ruta` (string) - Ruta del archivo a leer (ej: `'main.py'`).
-    -   **Ejemplo de uso interno**: `leer_archivo('src/utils.py')`
+### Archivos y directorios
 
-2.  **`listar_directorio(ruta='.')`**: Lista los archivos y carpetas de un directorio.
-    -   **Parámetros**: `ruta` (string, opcional) - Ruta del directorio a listar (Default: `'.'`).
-    -   **Ejemplo de uso interno**: `listar_directorio('documentos/')`
+1. **`leer_archivo(ruta)`**: Lee el contenido de un archivo de texto del disco.
+2. **`listar_directorio(ruta=".")`**: Lista archivos y carpetas de un directorio.
+3. **`escribir_archivo(ruta, contenido)`**: Crea o sobrescribe un archivo de texto.
+4. **`copiar_archivo(origen, destino)`**: Copia un archivo de origen a destino.
+5. **`mover_archivo(origen, destino)`**: Mueve o renombra un archivo.
+6. **`eliminar_archivo(ruta)`**: Elimina un archivo del disco.
+7. **`tree(ruta=".", max_nivel=7)`**: Muestra el árbol de directorios con conectores gráficos.
+8. **`descargar_url(url, timeout=15)`**: Descarga el contenido de una URL (máximo 100KB).
 
-3.  **`escribir_archivo(ruta, contenido)`**: Crea o sobrescribe un archivo de texto con el contenido dado.
-    -   **Parámetros**: `ruta` (string) - Ruta del archivo a escribir. `contenido` (string) - El texto completo a escribir.
-    -   **Ejemplo de uso interno**: `escribir_archivo('notas.txt', 'Esto es una nota.')`
+### Ejecución y búsqueda
 
-4.  **`correr_comando(comando, timeout=30)`**: Ejecuta comandos del sistema operativo de forma segura. Solo permite comandos de una whitelist predefinida.
-    -   **Parámetros**: `comando` (string) - El comando completo a ejecutar (ej: `'python script.py'` ). `timeout` (integer, opcional) - Segundos máximos de espera (Default: `30`).
-    -   **Whitelist de comandos**: `python`, `pip`, `dir`, `ls`, `type`, `cat`, `echo`, `mkdir`, `git status`, `git log`, `git diff`, `git branch`, `git show`, `git ls-files`.
-    -   **Ejemplo de uso interno**: `correr_comando('dir C:\\Users')`
+9. **`correr_comando(comando, timeout=30)`**: Ejecuta comandos del sistema operativo de forma segura (whitelist activa).
+10. **`ejecutar_python(codigo)`**: Ejecuta código Python directamente y devuelve la salida.
+11. **`buscar_texto(pattern, ruta=".", extension=None)`**: Busca un patrón (regex) en archivos.
 
-5.  **`buscar_texto(pattern, ruta='.', extension=None)`**: Busca un patrón (regex) en archivos de texto.
-    -   **Parámetros**: `pattern` (string) - Expresión regular a buscar (ej: `'def\\s+\\w+'`). `ruta` (string, opcional) - Directorio base a buscar (Default: `'.'`). `extension` (string, opcional) - Filtro por extensión (ej: `'*.py'` ).
-    -   **Resultado**: Devuelve coincidencias en formato `archivo:linea:contenido`.
-    -   **Ejemplo de uso interno**: `buscar_texto('TODO', extension='*.py')`
+### Memoria y notas
+
+12. **`recordar(clave, valor)`**: Guarda un recuerdo persistente entre sesiones.
+13. **`recuperar(clave)`**: Recupera un recuerdo guardado por su clave.
+14. **`listar_recuerdos()`**: Lista todos los recuerdos guardados.
+15. **`notas(accion, texto="", indice=None)`**: Gestiona notas personales (listar/agregar/borrar).
+
+### Utilidades
+
+16. **`fecha_hora(zona="Europe/Madrid")`**: Devuelve la fecha y hora actual.
+17. **`clima(ciudad)`**: Consulta el clima actual vía OpenWeatherMap.
+18. **`ver_logs(lineas=20)`**: Lee las últimas líneas del archivo de log.
+19. **`info_sistema()`**: Devuelve información del sistema (SO, Python, espacio en disco).
+
+### Git
+
+20. **`git_status(ruta=".")`**: Muestra el estado de git (archivos modificados, staged, untracked).
+21. **`git_diff(ruta=".", archivo=None)`**: Muestra las diferencias sin staged.
+22. **`git_commit(mensaje, archivo=None)`**: Hace un commit de los cambios.
+23. **`git_log(max_commits=20, ruta=".")`**: Muestra el historial de commits recientes.
+24. **`git_branch(ruta=".")`**: Muestra las ramas del repositorio y la rama actual.
+25. **`git_stash(accion, mensaje)`**: Stash/pop de cambios temporales (save/pop/list/drop).
+
+## Interfaz Web
+
+El agente incluye una interfaz HTTP ligera para usarlo desde un navegador:
+
+```bash
+python web_server.py          # Puerto 8080 (por defecto)
+python web_server.py 9000     # Puerto personalizado
+```
+
+- **Interfaz visual:** Abre http://localhost:8080 en tu navegador
+- **API REST:** `POST /chat` con body `{"prompt": "tu mensaje"}` → `{"response": "respuesta"}`
+- **Health check:** `GET /health` → `{"status": "ok"}`
 
 ## Tests
 
@@ -131,7 +162,7 @@ python test_estatico.py
 # Test unitarios — verifica comportamiento de cada tool
 python test_tools.py
 
-# Ambos: 17 tests en total (5 + 12)
+# Ambos: 45+ tests en total
 ```
 
 ## Ejemplo de Uso
@@ -168,3 +199,20 @@ ahora te toca a ti > creame un archivo llamado mi_nuevo_archivo.txt con el texto
   [resultado] OK: archivo 'mi_nuevo_archivo.txt' escrito (27 caracteres)
 tú > He creado el archivo mi_nuevo_archivo.txt con el contenido "Hola, soy un archivo nuevo."
 ```
+
+## Características Avanzadas
+
+### Historial de Comandos
+Usa las flechas ↑↓ para navegar por el historial de comandos de la sesión. El historial se guarda en `.agente_history` y persiste entre sesiones.
+
+### Logging Detallado
+Los logs se guardan en `agente.log` con formato detallado: `hora [nivel] modulo - funcion:linea — mensaje`. Rotación automática a 5MB con 3 archivos de backup.
+
+### Memoria por Contexto
+Los recuerdos pueden organizarse por contexto (`default`, `proyecto-x`, etc.) y buscar por término. Usa `recordar("clave", "valor", contexto="proyecto-x")` para guardar en un contexto específico.
+
+### Streaming
+Las respuestas se muestran en tiempo real mientras se generan, no esperas a tener la respuesta completa.
+
+### Reintentos Automáticos
+Ante fallos de API (rate limit, errores 5xx), el agente reintenta automáticamente con exponential backoff (hasta 3 intentos).

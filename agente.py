@@ -83,6 +83,12 @@ from tools import (
     mover_archivo,
     eliminar_archivo,
     info_sistema,
+    git_status,
+    git_diff,
+    git_commit,
+    git_log,
+    git_branch,
+    git_stash,
 )
 from schema import TOOLS_SCHEMA
 

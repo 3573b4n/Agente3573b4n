@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 from config import logger, _log_file
 from memory import cargar_memoria, guardar_memoria
@@ -487,6 +488,175 @@ def info_sistema() -> str:
     )
 
 
+# ---------------------------------------------------------------------------
+# Herramientas de Git
+# ---------------------------------------------------------------------------
+
+
+def git_status(ruta: str = ".") -> str:
+    """Muestra el estado de git: archivos modificados, staged, untracked."""
+    try:
+        resultado = subprocess.run(
+            ["git", "-C", ruta, "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if not resultado.stdout.strip():
+            return "OK: repositorio limpio (sin cambios)"
+        lineas = resultado.stdout.strip().split("\n")
+        resumen = f"{len(lineas)} archivo(s) con cambios:\n"
+        for linea in lineas[:50]:
+            resumen += f"  {linea}\n"
+        if len(lineas) > 50:
+            resumen += f"  ... y {len(lineas) - 50} mas\n"
+        return resumen
+    except subprocess.TimeoutExpired:
+        return "ERROR: timeout al ejecutar git status"
+    except FileNotFoundError:
+        return "ERROR: git no encontrado. ¿Estas en un repositorio git?"
+    except Exception as e:
+        return f"ERROR al ejecutar git status: {e}"
+
+
+def git_diff(ruta: str = ".", archivo: str = None) -> str:
+    """Muestra las diferencias sin staged de un archivo o todo el repositorio."""
+    cmd = ["git", "-C", ruta, "diff"]
+    if archivo:
+        cmd.extend(["--", archivo])
+    try:
+        resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        diff = resultado.stdout[:3000]
+        if not diff.strip():
+            return "OK: sin diferencias"
+        return f"--- Diferencias ---\n{diff}"
+    except subprocess.TimeoutExpired:
+        return "ERROR: timeout al ejecutar git diff"
+    except FileNotFoundError:
+        return "ERROR: git no encontrado"
+    except Exception as e:
+        return f"ERROR al ejecutar git diff: {e}"
+
+
+def git_commit(mensaje: str, archivo: str = None) -> str:
+    """Hace un commit de los cambios staged o de un archivo especifico."""
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"], capture_output=True, text=True, timeout=10
+        )
+        if not status.stdout.strip():
+            return "AVISO: no hay cambios para commitear"
+
+        if not archivo:
+            subprocess.run(["git", "add", "."], capture_output=True, timeout=10)
+
+        cmd = ["git", "commit", "-m", mensaje]
+        if archivo:
+            cmd.append(archivo)
+
+        resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        output = resultado.stdout.strip()
+        if resultado.returncode == 0:
+            return f"OK: {output}"
+        return f"ERROR: {resultado.stderr.strip() or output}"
+    except subprocess.TimeoutExpired:
+        return "ERROR: timeout al ejecutar git commit"
+    except FileNotFoundError:
+        return "ERROR: git no encontrado"
+    except Exception as e:
+        return f"ERROR al ejecutar git commit: {e}"
+
+
+def git_log(max_commits: int = 20, ruta: str = ".") -> str:
+    """Muestra el historial de commits recientes."""
+    try:
+        resultado = subprocess.run(
+            [
+                "git",
+                "-C",
+                ruta,
+                "log",
+                f"--max-count={max_commits}",
+                "--pretty=format:%h %s (%an, %ar)",
+                "--date=short",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if not resultado.stdout.strip():
+            return "OK: repositorio sin commits"
+        return resultado.stdout.strip()
+    except subprocess.TimeoutExpired:
+        return "ERROR: timeout al ejecutar git log"
+    except FileNotFoundError:
+        return "ERROR: git no encontrado"
+    except Exception as e:
+        return f"ERROR al ejecutar git log: {e}"
+
+
+def git_branch(ruta: str = ".") -> str:
+    """Muestra las ramas del repositorio y la rama actual."""
+    try:
+        resultado = subprocess.run(
+            ["git", "-C", ruta, "branch", "-v"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if resultado.returncode != 0:
+            return f"ERROR: {resultado.stderr.strip()}"
+        lineas = resultado.stdout.strip().split("\n")
+        actual = "[no hay rama]"
+        for linea in lineas:
+            if linea.startswith("*"):
+                actual = linea.replace("*", "→").strip()
+                break
+        return f"Branca actual: {actual}\n\nRamas:\n{resultado.stdout.strip()}"
+    except subprocess.TimeoutExpired:
+        return "ERROR: timeout al ejecutar git branch"
+    except FileNotFoundError:
+        return "ERROR: git no encontrado"
+    except Exception as e:
+        return f"ERROR al ejecutar git branch: {e}"
+
+
+def git_stash(accion: str = "save", mensaje: str = "") -> str:
+    """Stash o pop de cambios temporales.
+
+    Args:
+        accion: 'save' (guardar), 'pop' (restaurar), 'list' (ver stash), 'drop' (eliminar ultimo)
+        mensaje: mensaje opcional para el stash
+    """
+    try:
+        if accion == "save":
+            cmd = ["git", "stash", "save"]
+            if mensaje:
+                cmd.append(mensaje)
+            else:
+                cmd.append("auto-stash")
+        elif accion == "pop":
+            cmd = ["git", "stash", "pop"]
+        elif accion == "list":
+            cmd = ["git", "stash", "list"]
+        elif accion == "drop":
+            cmd = ["git", "stash", "drop"]
+        else:
+            return f"ERROR: accion '{accion}' desconocida. Usa save/pop/list/drop"
+
+        resultado = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        output = resultado.stdout.strip()
+        if resultado.returncode == 0:
+            return f"OK: {output or 'comando ejecutado'}"
+        return f"ERROR: {resultado.stderr.strip() or output}"
+    except subprocess.TimeoutExpired:
+        return "ERROR: timeout al ejecutar git stash"
+    except FileNotFoundError:
+        return "ERROR: git no encontrado"
+    except Exception as e:
+        return f"ERROR al ejecutar git stash: {e}"
+
+
 TOOL_FUNCTIONS = {
     "leer_archivo": leer_archivo,
     "listar_directorio": listar_directorio,
@@ -507,4 +677,11 @@ TOOL_FUNCTIONS = {
     "mover_archivo": mover_archivo,
     "eliminar_archivo": eliminar_archivo,
     "info_sistema": info_sistema,
+    # Git
+    "git_status": git_status,
+    "git_diff": git_diff,
+    "git_commit": git_commit,
+    "git_log": git_log,
+    "git_branch": git_branch,
+    "git_stash": git_stash,
 }

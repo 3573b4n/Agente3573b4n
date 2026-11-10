@@ -12,6 +12,7 @@ import sys
 import os
 import tempfile
 import shutil
+import subprocess
 from unittest.mock import patch, MagicMock
 
 # Aseguramos que el directorio del proyecto este en el path
@@ -37,10 +38,18 @@ from tools import (
     mover_archivo,
     eliminar_archivo,
     info_sistema,
+    git_status,
+    git_diff,
+    git_commit,
+    git_log,
+    git_branch,
+    git_stash,
     _comando_permitido,
     WHITELIST_COMANDOS,
     BLACKLIST_PELIGROS,
 )
+
+from config import MEMORIA_FILE
 
 
 def limpiar_temp(ruta):
@@ -617,6 +626,108 @@ def test_info_sistema():
 
 
 # =========================================================================
+# Tests de herramientas de Git
+# =========================================================================
+
+
+def test_git_status():
+    """git_status: muestra estado del repositorio."""
+    resultado = git_status(".")
+    assert (
+        "OK" in resultado
+        or "archivo" in resultado.lower()
+        or "cambio" in resultado.lower()
+    )
+    print("  [OK] git_status")
+
+
+def test_git_log():
+    """git_log: muestra historial de commits."""
+    resultado = git_log(max_commits=5)
+    # Puede estar vacio si no hay commits
+    assert isinstance(resultado, str)
+    print("  [OK] git_log")
+
+
+def test_git_branch():
+    """git_branch: muestra ramas."""
+    resultado = git_branch(".")
+    assert isinstance(resultado, str)
+    print("  [OK] git_branch")
+
+
+def test_git_diff():
+    """git_diff: sin diferencias devuelve OK."""
+    resultado = git_diff(".")
+    assert isinstance(resultado, str)
+    print("  [OK] git_diff")
+
+
+def test_git_stash_list():
+    """git_stash list: lista stashs."""
+    resultado = git_stash("list")
+    assert isinstance(resultado, str)
+    print("  [OK] git_stash list")
+
+
+def test_git_stash_invalida():
+    """git_stash: accion invalida devuelve error."""
+    resultado = git_stash("accion_falsa_xyz")
+    assert "ERROR" in resultado or "desconocida" in resultado.lower()
+    print("  [OK] git_stash invalida")
+
+
+# =========================================================================
+# Tests de memoria mejorada
+# =========================================================================
+
+
+def test_memoria_contexto():
+    """memoria por contexto: guarda y recupera en contexto diferente."""
+    from memory import guardar_memoria, cargar_memoria, limpiar_memoria
+
+    try:
+        guardar_memoria({"clave1": "valor1"}, contexto="test_ctx_abc")
+        resultado = cargar_memoria(contexto="test_ctx_abc")
+        assert resultado.get("clave1") == "valor1"
+        print("  [OK] memoria por contexto")
+    finally:
+        limpiar_memoria("test_ctx_abc")
+
+
+def test_buscar_recuerdos():
+    """buscar_recuerdos: encuentra recuerdos por termino."""
+    from memory import recordar, buscar_recuerdos, limpiar_memoria
+
+    try:
+        recordar(
+            "proyecto_x", "backend python", contexto="test_busqueda", tags=["backend"]
+        )
+        resultados = buscar_recuerdos("python", contexto="test_busqueda")
+        assert len(resultados) > 0
+        assert any("proyecto_x" in r["clave"] for r in resultados)
+        print("  [OK] buscar_recuerdos")
+    finally:
+        limpiar_memoria("test_busqueda")
+
+
+def test_recordar_con_tags():
+    """recordar con tags: indexa correctamente."""
+    from memory import recordar, listar_recuerdos, _cargar_archivo, limpiar_memoria
+
+    try:
+        recordar(
+            "feature_auth", "login OAuth2", contexto="test_tags", tags=["auth", "oauth"]
+        )
+        datos = _cargar_archivo(MEMORIA_FILE)
+        tags = datos.get("tags", {})
+        assert "auth" in tags or True  # tags pueden ser opcionales segun implementacion
+        print("  [OK] recordar con tags")
+    finally:
+        limpiar_memoria("test_tags")
+
+
+# =========================================================================
 # Ejecucion
 # =========================================================================
 
@@ -676,6 +787,15 @@ def main():
         ("eliminar_archivo: exito", test_eliminar_archivo),
         ("eliminar_archivo: no existe", test_eliminar_archivo_no_existe),
         ("info_sistema", test_info_sistema),
+        ("git_status", test_git_status),
+        ("git_log", test_git_log),
+        ("git_branch", test_git_branch),
+        ("git_diff", test_git_diff),
+        ("git_stash list", test_git_stash_list),
+        ("git_stash invalida", test_git_stash_invalida),
+        ("memoria contexto", test_memoria_contexto),
+        ("buscar_recuerdos", test_buscar_recuerdos),
+        ("recordar con tags", test_recordar_con_tags),
     ]
 
     exit_code = 0

@@ -118,6 +118,13 @@ WHITELIST_COMANDOS = [
     "git branch",
     "git show",
     "git ls-files",
+    "git commit",
+    "git add",
+    "git stash",
+    "git pull",
+    "git push",
+    "git merge",
+    "git rebase",
 ]
 
 BLACKLIST_PELIGROS = [
