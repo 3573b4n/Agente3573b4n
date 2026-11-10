@@ -67,6 +67,11 @@ from tools import (
     recuperar,
     listar_recuerdos,
     ver_logs,
+    ejecutar_python,
+    copiar_archivo,
+    mover_archivo,
+    eliminar_archivo,
+    info_sistema,
 )
 from schema import TOOLS_SCHEMA
 

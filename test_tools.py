@@ -32,6 +32,11 @@ from tools import (
     notas,
     clima,
     ver_logs,
+    ejecutar_python,
+    copiar_archivo,
+    mover_archivo,
+    eliminar_archivo,
+    info_sistema,
     _comando_permitido,
     WHITELIST_COMANDOS,
     BLACKLIST_PELIGROS,
@@ -490,6 +495,128 @@ def test_generar_retry_success_on_second():
 
 
 # =========================================================================
+# Tests de ejecutar_python
+# =========================================================================
+
+
+def test_ejecutar_python_exito():
+    """ejecutar_python: ejecuta codigo simple."""
+    resultado = ejecutar_python("print('hola mundo')")
+    assert "hola mundo" in resultado
+    assert "[exit code 0]" in resultado
+    print("  [OK] ejecutar_python: exito")
+
+
+def test_ejecutar_python_error():
+    """ejecutar_python: error de sintaxis devuelve stderr."""
+    resultado = ejecutar_python("raise ValueError('test')")
+    assert "ValueError" in resultado or "ERROR" in resultado
+    print("  [OK] ejecutar_python: error capturado")
+
+
+def test_ejecutar_python_timeout():
+    """ejecutar_python: timeout con sleep largo."""
+    resultado = ejecutar_python("import time; time.sleep(20)")
+    assert "timeout" in resultado.lower() or "ERROR" in resultado
+    print("  [OK] ejecutar_python: timeout manejado")
+
+
+# =========================================================================
+# Tests de copiar_archivo
+# =========================================================================
+
+
+def test_copiar_archivo():
+    """copiar_archivo: copia un archivo existente."""
+    origen = "tools.py"
+    destino = "test_temp_copia.txt"
+    try:
+        resultado = copiar_archivo(origen, destino)
+        assert resultado.startswith("OK")
+        assert os.path.exists(destino)
+        with open(destino, encoding="utf-8") as f:
+            with open(origen, encoding="utf-8") as f2:
+                assert f.read() == f2.read()
+        print("  [OK] copiar_archivo: exito")
+    finally:
+        limpiar_temp(destino)
+
+
+def test_copiar_archivo_no_existe():
+    """copiar_archivo: origen inexistente devuelve error."""
+    resultado = copiar_archivo("no_existe_xyz.txt", "destino.txt")
+    assert resultado.startswith("ERROR")
+    print("  [OK] copiar_archivo: origen no existe")
+
+
+# =========================================================================
+# Tests de mover_archivo
+# =========================================================================
+
+
+def test_mover_archivo():
+    """mover_archivo: mueve un archivo."""
+    origen = "test_temp_mover_origen.txt"
+    destino = "test_temp_mover_destino.txt"
+    try:
+        escribir_archivo(origen, "contenido mover")
+        resultado = mover_archivo(origen, destino)
+        assert resultado.startswith("OK")
+        assert not os.path.exists(origen)
+        assert os.path.exists(destino)
+        print("  [OK] mover_archivo: exito")
+    finally:
+        limpiar_temp(origen)
+        limpiar_temp(destino)
+
+
+def test_mover_archivo_no_existe():
+    """mover_archivo: origen inexistente devuelve error."""
+    resultado = mover_archivo("no_existe_xyz.txt", "destino.txt")
+    assert resultado.startswith("ERROR")
+    print("  [OK] mover_archivo: origen no existe")
+
+
+# =========================================================================
+# Tests de eliminar_archivo
+# =========================================================================
+
+
+def test_eliminar_archivo():
+    """eliminar_archivo: borra un archivo existente."""
+    ruta = "test_temp_eliminar.txt"
+    try:
+        escribir_archivo(ruta, "borrable")
+        resultado = eliminar_archivo(ruta)
+        assert resultado.startswith("OK")
+        assert not os.path.exists(ruta)
+        print("  [OK] eliminar_archivo: exito")
+    finally:
+        limpiar_temp(ruta)
+
+
+def test_eliminar_archivo_no_existe():
+    """eliminar_archivo: archivo inexistente devuelve aviso."""
+    resultado = eliminar_archivo("no_existe_abc123.txt")
+    assert "no existe" in resultado.lower()
+    print("  [OK] eliminar_archivo: no existe")
+
+
+# =========================================================================
+# Tests de info_sistema
+# =========================================================================
+
+
+def test_info_sistema():
+    """info_sistema: devuelve datos del sistema."""
+    resultado = info_sistema()
+    assert "Sistema:" in resultado
+    assert "Python:" in resultado
+    assert "Disco:" in resultado
+    print("  [OK] info_sistema")
+
+
+# =========================================================================
 # Ejecucion
 # =========================================================================
 
@@ -539,6 +666,16 @@ def main():
         ("Reintentos: auth no retryable", test_is_not_retryable_auth),
         ("Reintentos: backoff exponencial", test_wait_exponential_backoff),
         ("Reintentos: retry success 2o intento", test_generar_retry_success_on_second),
+        ("ejecutar_python: exito", test_ejecutar_python_exito),
+        ("ejecutar_python: error", test_ejecutar_python_error),
+        ("ejecutar_python: timeout", test_ejecutar_python_timeout),
+        ("copiar_archivo: exito", test_copiar_archivo),
+        ("copiar_archivo: no existe", test_copiar_archivo_no_existe),
+        ("mover_archivo: exito", test_mover_archivo),
+        ("mover_archivo: no existe", test_mover_archivo_no_existe),
+        ("eliminar_archivo: exito", test_eliminar_archivo),
+        ("eliminar_archivo: no existe", test_eliminar_archivo_no_existe),
+        ("info_sistema", test_info_sistema),
     ]
 
     exit_code = 0

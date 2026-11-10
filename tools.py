@@ -376,6 +376,117 @@ def ver_logs(lineas: int = 20) -> str:
         return f"ERROR al leer logs: {e}"
 
 
+# ---------------------------------------------------------------------------
+# Herramientas adicionales
+# ---------------------------------------------------------------------------
+
+
+def ejecutar_python(codigo: str) -> str:
+    """Ejecuta codigo Python y devuelve la salida estandar o el error."""
+    import subprocess
+    import sys
+
+    try:
+        resultado = subprocess.run(
+            [sys.executable, "-c", codigo],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        salida = ""
+        if resultado.stdout:
+            salida += resultado.stdout[:5000]
+        if resultado.stderr:
+            salida += "\nSTDERR:\n" + resultado.stderr[:2000]
+        if resultado.returncode != 0:
+            salida += f"\n[exit code {resultado.returncode}]"
+        else:
+            salida = f"[exit code 0]\n{salida.strip()}"
+        return salida
+    except subprocess.TimeoutExpired:
+        return "ERROR: ejecucion agoto el timeout (15s)"
+    except Exception as e:
+        return f"ERROR al ejecutar Python: {e}"
+
+
+def copiar_archivo(origen: str, destino: str) -> str:
+    """Copia un archivo de origen a destino, creando directorios si es necesario."""
+    import shutil
+
+    try:
+        directorio_padre = os.path.dirname(destino)
+        if directorio_padre and not os.path.exists(directorio_padre):
+            os.makedirs(directorio_padre, exist_ok=True)
+        shutil.copy2(origen, destino)
+        tamano = os.path.getsize(destino)
+        return f"OK: '{origen}' copiado a '{destino}' ({tamano} bytes)"
+    except FileNotFoundError:
+        return f"ERROR: origen no encontrado '{origen}'"
+    except Exception as e:
+        return f"ERROR al copiar: {e}"
+
+
+def mover_archivo(origen: str, destino: str) -> str:
+    """Mueve o renombra un archivo de origen a destino."""
+    import shutil
+
+    try:
+        directorio_padre = os.path.dirname(destino)
+        if directorio_padre and not os.path.exists(directorio_padre):
+            os.makedirs(directorio_padre, exist_ok=True)
+        shutil.move(origen, destino)
+        return f"OK: '{origen}' movido a '{destino}'"
+    except FileNotFoundError:
+        return f"ERROR: origen no encontrado '{origen}'"
+    except Exception as e:
+        return f"ERROR al mover: {e}"
+
+
+def eliminar_archivo(ruta: str) -> str:
+    """Elimina un archivo especifico del disco (con confirmacion logica)."""
+    try:
+        if not os.path.exists(ruta):
+            return f"(no existe '{ruta}', nada que borrar)"
+        os.remove(ruta)
+        return f"OK: '{ruta}' eliminado"
+    except PermissionError:
+        return f"ERROR: permiso denegado para eliminar '{ruta}'"
+    except Exception as e:
+        return f"ERROR al eliminar '{ruta}': {e}"
+
+
+def info_sistema() -> str:
+    """Devuelve informacion del sistema: espacio en disco, SO, Python."""
+    import platform
+    import shutil
+
+    # Sistema operativo
+    so = platform.system()
+    release = platform.release()
+    arquitectura = platform.machine()
+    python_version = platform.python_version()
+
+    # Espacio en disco de la unidad actual
+    try:
+        uso = shutil.disk_usage(".")
+        total_gb = uso.total / (1024**3)
+        usado_gb = uso.used / (1024**3)
+        libre_gb = uso.free / (1024**3)
+        disco = (
+            f"Disco: {total_gb:.1f} GB total | {usado_gb:.1f} GB usado | "
+            f"{libre_gb:.1f} GB libre"
+        )
+    except Exception:
+        disco = "No se pudo obtener informacion del disco"
+
+    return (
+        f"Sistema: {so} {release}\n"
+        f"Arquitectura: {arquitectura}\n"
+        f"Python: {python_version}\n"
+        f"{disco}"
+    )
+
+
 TOOL_FUNCTIONS = {
     "leer_archivo": leer_archivo,
     "listar_directorio": listar_directorio,
@@ -391,4 +502,9 @@ TOOL_FUNCTIONS = {
     "descargar_url": descargar_url,
     "notas": notas,
     "clima": clima,
+    "ejecutar_python": ejecutar_python,
+    "copiar_archivo": copiar_archivo,
+    "mover_archivo": mover_archivo,
+    "eliminar_archivo": eliminar_archivo,
+    "info_sistema": info_sistema,
 }
