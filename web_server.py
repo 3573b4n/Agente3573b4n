@@ -43,14 +43,27 @@ def _init_agent():
     """Inicializa el LLM y carga memoria previa."""
     global _llm_instance, _historial
 
-    api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    # .env tiene prioridad sobre variables de entorno
+    _vals = {}
+    try:
+        from dotenv import dotenv_values
+
+        _vals = dotenv_values()
+    except Exception:
+        pass
+    api_key = (
+        _vals.get("GEMINI_API_KEY")
+        or _vals.get("GOOGLE_API_KEY")
+        or os.environ.get("GEMINI_API_KEY")
+        or os.environ.get("GOOGLE_API_KEY")
+    )
     if not api_key:
         raise RuntimeError("Falta GEMINI_API_KEY o GOOGLE_API_KEY")
 
     _llm_instance = LLM(
         proveedor="gemini",
         api_key=api_key,
-        model="gemini-2.5-flash",
+        model="gemini-3.8-flash",
         max_retries=3,
         base_delay=1.0,
     )

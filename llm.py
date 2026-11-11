@@ -53,7 +53,7 @@ class GeminiProvider:
     def __init__(
         self,
         api_key: str = None,
-        model: str = "gemini-2.5-flash",
+        model: str = "gemini-3.8-flash",
         max_retries: int = 3,
         base_delay: float = 1.0,
     ):

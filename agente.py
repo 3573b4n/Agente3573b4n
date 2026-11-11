@@ -106,7 +106,7 @@ if not API_KEY:
     print("    CMD:        set GEMINI_API_KEY=tu-key-aqui")
     sys.exit(1)
 
-MODEL_NOMBRE = "gemini-2.5-flash"
+MODEL_NOMBRE = "gemini-3.8-flash"
 MAX_RETRIES = 3  # intentos antes de fallar definitivamente
 BASE_DELAY = 1.0  # delay base en segundos (exponential backoff)
 
