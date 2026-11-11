@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import threading
+import socket
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 from dotenv import load_dotenv
@@ -64,8 +65,9 @@ def _init_agent():
         proveedor="gemini",
         api_key=api_key,
         model="gemini-3.8-flash",
-        max_retries=3,
+        max_retries=1,
         base_delay=1.0,
+        timeout_secs=float(os.environ.get("LLM_TIMEOUT_SECS", "300")),
     )
 
     # Cargar historial previo
@@ -120,24 +122,40 @@ def _ejecutar_chat(prompt: str) -> str:
             texto_completo = ""
             tiene_tool_calls = False
 
-            for chunk in stream:
-                try:
-                    parts = chunk.candidates[0].content.parts
-                    if parts:
-                        for part in parts:
-                            if hasattr(part, "function_call") and part.function_call:
-                                tiene_tool_calls = True
-                except (IndexError, AttributeError, TypeError):
-                    pass
+            try:
+                for chunk in stream:
+                    try:
+                        parts = chunk.candidates[0].content.parts
+                        if parts:
+                            for part in parts:
+                                if (
+                                    hasattr(part, "function_call")
+                                    and part.function_call
+                                ):
+                                    tiene_tool_calls = True
+                    except (IndexError, AttributeError, TypeError):
+                        pass
 
-                try:
-                    partes = chunk.candidates[0].content.parts
-                    if partes:
-                        for parte in partes:
-                            if hasattr(parte, "text") and parte.text:
-                                texto_completo += parte.text
-                except (IndexError, AttributeError, TypeError):
-                    pass
+                    try:
+                        partes = chunk.candidates[0].content.parts
+                        if partes:
+                            for parte in partes:
+                                if hasattr(parte, "text") and parte.text:
+                                    texto_completo += parte.text
+                    except (IndexError, AttributeError, TypeError):
+                        pass
+            except Exception as e:
+                # Errores durante streaming (503, timeouts, etc.)
+                error_msg = str(e)
+                if "503" in error_msg or "UNAVAILABLE" in error_msg:
+                    return "[aviso] Gemini está con alta demanda temporal. Probá de nuevo en unos minutos."
+                elif "402" in error_msg or "credits" in error_msg.lower():
+                    return "[error] Créditos agotados. Verificá tu cuenta en Google AI Studio."
+                elif "404" in error_msg or "NOT_FOUND" in error_msg:
+                    return "[error] Modelo no disponible. Contactá al administrador."
+                else:
+                    logger.error(f"Error en streaming: {e}")
+                    return f"[error] Error inesperado: {error_msg[:200]}"
 
             if tiene_tool_calls:
                 contenido = None
@@ -162,14 +180,20 @@ def _ejecutar_chat(prompt: str) -> str:
                                         else {},
                                     }
                                 )
-                except (IndexIndexError, AttributeError, TypeError):
+                except (IndexError, AttributeError, TypeError):
                     pass
 
-                for tc in tool_calls:
-                    resultado = str(TOOL_FUNCTIONS[tc["name"]](**tc["args"]))
-                    _historial.append(
-                        _llm_instance.crear_mensaje_tool_response(tc["name"], resultado)
-                    )
+                try:
+                    for tc in tool_calls:
+                        resultado = str(TOOL_FUNCTIONS[tc["name"]](**tc["args"]))
+                        _historial.append(
+                            _llm_instance.crear_mensaje_tool_response(
+                                tc["name"], resultado
+                            )
+                        )
+                except Exception as e:
+                    logger.error(f"Error ejecutando herramienta: {e}")
+                    texto_completo = f"[error ejecutando herramienta] {e}"
 
             elif texto_completo:
                 respuesta_final = texto_completo.strip()
@@ -212,11 +236,41 @@ class AgenteHandler(BaseHTTPRequestHandler):
             if not prompt:
                 self._json_response({"error": "prompt vacio"}, 400)
                 return
-            response = _ejecutar_chat(prompt)
-            self._json_response({"response": response})
+
+            # Ejecutar en hilo separado con timeout para que el servidor
+            # nunca se cuelgue si Gemini no responde
+            resultado = [None]
+            excepcion = [None]
+
+            def ejecutar():
+                try:
+                    resultado[0] = _ejecutar_chat(prompt)
+                except Exception as e:
+                    excepcion[0] = e
+
+            hilo = threading.Thread(target=ejecutar, daemon=True)
+            hilo.start()
+            chat_timeout = int(os.environ.get("CHAT_TIMEOUT_SECS", "120"))
+            hilo.join(timeout=chat_timeout)  # max configurable (default 120s)
+
+            if excepcion[0]:
+                raise excepcion[0]
+            if resultado[0] is None:
+                self._json_response(
+                    {
+                        "error": f"La solicitud excedió el tiempo límite ({chat_timeout}s)"
+                    },
+                    504,
+                )
+                return
+
+            self._json_response({"response": resultado[0]})
         except Exception as e:
             logger.exception("Error en /chat")
-            self._json_response({"error": str(e)}, 500)
+            try:
+                self._json_response({"error": str(e)}, 500)
+            except Exception:
+                pass  # conexión ya cerrada por el cliente
 
     def _serve_index(self):
         html = """<!DOCTYPE html>
@@ -292,11 +346,14 @@ input.addEventListener('keydown', e => { if (e.key === 'Enter') enviar(); });
         self.wfile.write(html.encode("utf-8"))
 
     def _json_response(self, data, status=200):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            pass  # cliente cerró la conexión
 
     def _not_found(self):
         self._json_response({"error": "no encontrado"}, 404)

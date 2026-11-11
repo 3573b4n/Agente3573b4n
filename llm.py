@@ -56,6 +56,7 @@ class GeminiProvider:
         model: str = "gemini-3.8-flash",
         max_retries: int = 3,
         base_delay: float = 1.0,
+        timeout_secs: float = 300.0,
     ):
         # Si no pasamos key, la buscamos en variable de entorno
         self.api_key = (
@@ -71,6 +72,7 @@ class GeminiProvider:
         self.model = model
         self.max_retries = max_retries
         self.base_delay = base_delay
+        self.timeout_secs = timeout_secs
 
         # Import laziness: solo importamos google.genai si este provider se usa
         try:
@@ -79,7 +81,10 @@ class GeminiProvider:
 
             self.genai = genai
             self.types = types
-            self.client = genai.Client(api_key=self.api_key)
+            self.client = genai.Client(
+                api_key=self.api_key,
+                http_options={"timeout": int(self.timeout_secs * 1000)},
+            )
         except ImportError as e:
             raise LLMError(
                 "Falta instalar google-genai: pip install google-genai"
@@ -333,15 +338,20 @@ class LLM:
         proveedor: str = "gemini",
         max_retries: int = 3,
         base_delay: float = 1.0,
+        timeout_secs: float = 90.0,
         **kwargs,
     ):
         self.proveedor_nombre = proveedor
         self.max_retries = max_retries
         self.base_delay = base_delay
+        self.timeout_secs = timeout_secs
 
         if proveedor == "gemini":
             self._impl = GeminiProvider(
-                max_retries=max_retries, base_delay=base_delay, **kwargs
+                max_retries=max_retries,
+                base_delay=base_delay,
+                timeout_secs=timeout_secs,
+                **kwargs,
             )
         # Cuando implementemos otros:
         # elif proveedor == "claude":
